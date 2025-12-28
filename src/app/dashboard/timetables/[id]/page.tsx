@@ -18,8 +18,7 @@ import {
     BookOpen,
     FlaskConical,
     X,
-    Users,
-    Music
+    Users
 } from 'lucide-react'
 
 interface Timetable {
@@ -110,7 +109,7 @@ export default function TimetableEditorPage() {
     // Add slot form
     const [showAddForm, setShowAddForm] = useState(false)
     const [selectedDay, setSelectedDay] = useState('')
-    const [slotType, setSlotType] = useState<'class' | 'break' | 'free' | 'cultural'>('class')
+    const [slotType, setSlotType] = useState<'class' | 'break' | 'free'>('class')
     const [selectedSubject, setSelectedSubject] = useState('')
     const [selectedLecturer, setSelectedLecturer] = useState('')
     const [selectedClassroom, setSelectedClassroom] = useState('')
@@ -409,10 +408,12 @@ export default function TimetableEditorPage() {
                 is_practical: isPractical
             }
 
-            if (slotType === 'class' || slotType === 'cultural') {
+            if (slotType === 'class') {
                 slotData.subject_id = isPractical ? null : selectedSubject
-                // Cultural activities don't have a lecturer
-                slotData.lecturer_id = (isPractical || slotType === 'cultural') ? null : selectedLecturer
+                // Cultural subjects don't need a lecturer
+                const selectedSubjectObj = subjects.find(s => s.id === selectedSubject)
+                const isCulturalSubject = selectedSubjectObj?.name?.toLowerCase().includes('cultural')
+                slotData.lecturer_id = (isPractical || isCulturalSubject) ? null : selectedLecturer
                 slotData.classroom_id = selectedClassroom
             }
 
@@ -812,22 +813,14 @@ export default function TimetableEditorPage() {
                             {/* Slot Type */}
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={labelStyle}>Slot Type</label>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                    {(['class', 'free', 'break', 'cultural'] as const).map((type) => (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    {(['class', 'free', 'break'] as const).map((type) => (
                                         <button
                                             key={type}
-                                            onClick={() => {
-                                                setSlotType(type)
-                                                // Reset lecturer when cultural is selected
-                                                if (type === 'cultural') {
-                                                    setSelectedLecturer('')
-                                                    setIsPractical(false)
-                                                }
-                                            }}
+                                            onClick={() => setSlotType(type)}
                                             style={{
                                                 ...buttonStyle,
                                                 flex: 1,
-                                                minWidth: '70px',
                                                 background: slotType === type ? '#4f46e5' : '#f3f4f6',
                                                 color: slotType === type ? 'white' : '#374151',
                                                 display: 'flex',
@@ -839,8 +832,7 @@ export default function TimetableEditorPage() {
                                             {type === 'class' && <BookOpen size={14} />}
                                             {type === 'free' && <Clock size={14} />}
                                             {type === 'break' && <Coffee size={14} />}
-                                            {type === 'cultural' && <Music size={14} />}
-                                            {type === 'free' ? 'Free/Gap' : type === 'cultural' ? 'Cultural' : type.charAt(0).toUpperCase() + type.slice(1)}
+                                            {type === 'free' ? 'Free/Gap' : type.charAt(0).toUpperCase() + type.slice(1)}
                                         </button>
                                     ))}
                                 </div>
@@ -872,7 +864,7 @@ export default function TimetableEditorPage() {
                                 </div>
                             )}
 
-                            {(slotType === 'class' || slotType === 'cultural') && (
+                            {slotType === 'class' && (
                                 <>
                                     {/* Class Type - Only show for regular class, not cultural */}
                                     {slotType === 'class' && (
@@ -958,18 +950,18 @@ export default function TimetableEditorPage() {
                                             </div>
 
                                             <div style={{ marginBottom: '16px' }}>
-                                                <label style={labelStyle}>Lecturer {slotType === 'cultural' ? '(N/A)' : '*'}</label>
+                                                <label style={labelStyle}>Lecturer {subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? '(N/A for Cultural)' : '*'}</label>
                                                 <select
-                                                    value={slotType === 'cultural' ? '' : selectedLecturer}
+                                                    value={subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? '' : selectedLecturer}
                                                     onChange={(e) => setSelectedLecturer(e.target.value)}
-                                                    disabled={slotType === 'cultural'}
+                                                    disabled={!!subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural')}
                                                     style={{
                                                         ...selectStyle,
-                                                        backgroundColor: slotType === 'cultural' ? '#f3f4f6' : 'white',
-                                                        cursor: slotType === 'cultural' ? 'not-allowed' : 'pointer'
+                                                        backgroundColor: subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? '#f3f4f6' : 'white',
+                                                        cursor: subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? 'not-allowed' : 'pointer'
                                                     }}
                                                 >
-                                                    <option value="">{slotType === 'cultural' ? 'Not Required' : 'Select lecturer'}</option>
+                                                    <option value="">{subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? 'Not Required' : 'Select lecturer'}</option>
                                                     {lecturers.map(lec => (
                                                         <option key={lec.id} value={lec.id}>
                                                             {lec.full_name} ({lec.short_name})

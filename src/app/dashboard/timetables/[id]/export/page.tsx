@@ -600,7 +600,7 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
         return null // Handled by grid
     }
 
-    if (slot.slot_type === 'cultural') {
+    if (slot.slot_type === 'cultural' || slot.subject?.name?.toLowerCase().includes('cultural')) {
         return (
             <div>
                 <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#7c3aed' }}>CULTURAL</div>
