@@ -25,6 +25,9 @@ interface TimetableSlot {
     start_time: string
     end_time: string
     slot_type: string
+    subject_id?: string
+    lecturer_id?: string
+    classroom_id?: string
     subject?: { name: string, code: string }
     lecturer?: { full_name: string, short_name: string }
     classroom?: { name: string }
@@ -39,6 +42,8 @@ interface CollegeSettings {
     college_start_time: string
     college_end_time: string
     college_name: string
+    lunch_start_time: string
+    lunch_end_time: string
 }
 
 export default function ExportTimetable() {
@@ -62,46 +67,86 @@ export default function ExportTimetable() {
 
     const fetchData = async () => {
         try {
+            // Fetch timetable
             const { data: ttData, error: ttError } = await supabase
                 .from('timetables')
                 .select('*')
                 .eq('id', id)
                 .single()
-
             if (ttError) throw ttError
             setTimetable(ttData)
 
+            // Fetch settings
             const { data: settingsData } = await supabase
                 .from('college_settings')
                 .select('*')
                 .single()
             setSettings(settingsData)
 
-            const { data: slotsData, error: slotsError } = await supabase
-                .from('timetable_slots')
-                .select(`
-                    *,
-                    subject:subjects(name, code),
-                    lecturer:lecturers(full_name, short_name),
-                    classroom:classrooms(name),
-                    lab_batches(
-                        batch_name,
-                        subject:subjects(code),
-                        lecturer:lecturers(short_name),
-                        classroom:classrooms(name)
-                    )
-                `)
-                .eq('timetable_id', id)
+            // Fetch all related data in parallel
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
 
-            if (slotsError) throw slotsError
-            setSlots(slotsData || [])
+            const [
+                { data: slotsData },
+                { data: subjectsData },
+                { data: lecturersData },
+                { data: classroomsData }
+            ] = await Promise.all([
+                supabase.from('timetable_slots').select('*').eq('timetable_id', id),
+                supabase.from('subjects').select('*').eq('user_id', user.id),
+                supabase.from('lecturers').select('*').eq('user_id', user.id),
+                supabase.from('classrooms').select('*').eq('user_id', user.id)
+            ])
+
+            // Fetch lab batches
+            const slotIds = (slotsData || []).map(s => s.id)
+            let batchesData: any[] = []
+            if (slotIds.length > 0) {
+                const { data: bData } = await supabase.from('lab_batches').select('*').in('timetable_slot_id', slotIds)
+                batchesData = bData || []
+            }
+
+            // JOIN data manually
+            const joinedSlots = (slotsData || []).map(slot => {
+                const batches = batchesData.filter(b => b.timetable_slot_id === slot.id).map(b => ({
+                    ...b,
+                    subject: subjectsData?.find((s: any) => s.id === b.subject_id),
+                    lecturer: lecturersData?.find((l: any) => l.id === b.lecturer_id),
+                    classroom: classroomsData?.find((c: any) => c.id === b.classroom_id)
+                }))
+
+                return {
+                    ...slot,
+                    subject: subjectsData?.find((s: any) => s.id === slot.subject_id),
+                    lecturer: lecturersData?.find((l: any) => l.id === slot.lecturer_id),
+                    classroom: classroomsData?.find((c: any) => c.id === slot.classroom_id),
+                    lab_batches: batches
+                }
+            })
+
+            setSlots(joinedSlots)
 
         } catch (error) {
-            console.error('Error:', error)
+            console.error('Error loading export data:', error)
             toast({ title: 'Error', description: 'Failed to load data', variant: 'destructive' })
         } finally {
             setLoading(false)
         }
+    }
+
+    // Time Helpers
+    const toMinutes = (time: string) => {
+        if (!time) return 0
+        const [h, m] = time.split(':').map(Number)
+        return h * 60 + m
+    }
+
+    const fromMinutes = (mins: number) => {
+        const h = Math.floor(mins / 60)
+        const m = mins % 60
+        // Use 24h format for logic, formatTime12 for display
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
     }
 
     const formatTime12 = (timeStr: string): string => {
@@ -112,13 +157,74 @@ export default function ExportTimetable() {
         return `${hour12}:${String(mins).padStart(2, '0')} ${period}`
     }
 
-    // Grid Generation Logic
-    const timeSlots = Array.from(new Set(slots.map(s => `${s.start_time}-${s.end_time}`)))
-        .map(t => {
-            const [start, end] = t.split('-')
-            return { start, end }
+    // Generate Standard Grid based on Settings
+    const generateTimeSlots = () => {
+        if (!settings) return []
+
+        const slotsGrid: { start: string, end: string, type?: string }[] = []
+        let current = toMinutes(settings.college_start_time)
+        const end = toMinutes(settings.college_end_time)
+        const lunchStart = toMinutes(settings.lunch_start_time)
+        const lunchEnd = toMinutes(settings.lunch_end_time)
+        const duration = settings.default_class_duration || 60
+
+        // Loop until end time
+        while (current < end) {
+            // Check if we are at Lunch Start
+            if (current === lunchStart) {
+                // Add Lunch Slot
+                slotsGrid.push({
+                    start: settings.lunch_start_time,
+                    end: settings.lunch_end_time,
+                    type: 'lunch'
+                })
+                current = lunchEnd
+                continue
+            }
+
+            // Normal Slot
+            let next = current + duration
+
+            // If next exceeds lunch start (and current is before lunch), cap it at lunch start?
+            // Usually timetables are designed so slots fit. We'll simply check boundaries.
+            if (current < lunchStart && next > lunchStart) {
+                // If a standard slot would cross into lunch, we adjust?
+                // For simplicity, let's assume valid scheduling.
+                // We'll just start the next slot.
+            }
+
+            // If next exceeds college end, cap at college end
+            if (next > end) next = end
+
+            // Should we add the slot if it has 0 duration?
+            if (next > current) {
+                slotsGrid.push({
+                    start: fromMinutes(current),
+                    end: fromMinutes(next),
+                    type: 'class'
+                })
+            }
+
+            current = next
+        }
+
+        // Also merge with unique slots from ACTUAL data to ensure no added slot is missed
+        // if it doesn't align with standard grid
+        const actualTimes = new Set(slots.map(s => `${s.start_time}-${s.end_time}`))
+        actualTimes.forEach(t => {
+            const [s, e] = t.split('-')
+            // Check if this time already exists in grid approx
+            const exists = slotsGrid.some(gridSlot => Math.abs(toMinutes(gridSlot.start) - toMinutes(s)) < 5)
+            if (!exists) {
+                slotsGrid.push({ start: s, end: e, type: 'custom' })
+            }
         })
-        .sort((a, b) => a.start.localeCompare(b.start))
+
+        // Sort by start time
+        return slotsGrid.sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+    }
+
+    const timeSlots = generateTimeSlots()
 
     const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     const workingDays = (settings?.working_days || []).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b))
@@ -331,7 +437,13 @@ export default function ExportTimetable() {
                                     <tr key={day}>
                                         <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb' }}>{day}</td>
                                         {timeSlots.map((time, i) => {
-                                            const slot = slots.find(s => s.day_of_week === day && s.start_time === time.start)
+                                            const slot = slots.find(s =>
+                                                s.day_of_week === day &&
+                                                Math.abs(toMinutes(s.start_time) - toMinutes(time.start)) < 5 // Match approximate start
+                                            )
+                                            // Handle Lunch in grid
+                                            if (time.type === 'lunch') return <td key={i} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>LUNCH</td>
+
                                             return (
                                                 <td key={i} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', height: '60px' }}>
                                                     {renderSlotContent(slot)}
@@ -345,9 +457,21 @@ export default function ExportTimetable() {
                                     <tr key={i}>
                                         <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb', whiteSpace: 'nowrap' }}>
                                             {formatTime12(time.start)} - {formatTime12(time.end)}
+                                            {time.type === 'lunch' && <div style={{ fontSize: '10px', color: '#b45309' }}>LUNCH</div>}
                                         </td>
                                         {workingDays.map(day => {
-                                            const slot = slots.find(s => s.day_of_week === day && s.start_time === time.start)
+                                            // Special Case: If it's the lunch row
+                                            if (time.type === 'lunch') {
+                                                if (day === workingDays[0]) { // First col
+                                                    return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold' }}>LUNCH BREAK</td>
+                                                }
+                                                return null // Scip other cols
+                                            }
+
+                                            const slot = slots.find(s =>
+                                                s.day_of_week === day &&
+                                                Math.abs(toMinutes(s.start_time) - toMinutes(time.start)) < 5
+                                            )
                                             return (
                                                 <td key={day} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', minWidth: '120px' }}>
                                                     {renderSlotContent(slot)}
