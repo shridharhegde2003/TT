@@ -230,7 +230,8 @@ export default function TimetableEditorPage() {
             setClassrooms(classroomsData || [])
             setSubjects(subjectsData || [])
 
-            if (settingsData?.working_days?.[0]) {
+            // Only set initial day if not already selected
+            if (!selectedDay && settingsData?.working_days?.[0]) {
                 setSelectedDay(settingsData.working_days[0])
             }
         } catch (error) {
