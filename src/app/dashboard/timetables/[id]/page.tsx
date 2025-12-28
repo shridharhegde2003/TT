@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast'
 import {
     Plus,
     Trash2,
+    Pencil,
     ArrowLeft,
     CheckCircle2,
     Download,
@@ -112,7 +113,11 @@ export default function TimetableEditorPage() {
     const [selectedClassroom, setSelectedClassroom] = useState('')
     const [isPractical, setIsPractical] = useState(false)
     const [numberOfPeriods, setNumberOfPeriods] = useState(1)
-    const [labBatches, setLabBatches] = useState<{ batch_name: string, subject_id: string, lecturer_id: string }[]>([])
+    const [labBatches, setLabBatches] = useState<{ batch_name: string, subject_id: string, lecturer_id: string, classroom_id?: string }[]>([])
+
+    // Edit state
+    const [editingSlot, setEditingSlot] = useState<SlotWithDetails | null>(null)
+    const [showEditModal, setShowEditModal] = useState(false)
 
     // Styles
     const selectStyle = {
@@ -471,9 +476,43 @@ export default function TimetableEditorPage() {
         }
     }
 
+    // Edit slot functions
+    const handleEditSlot = (slot: SlotWithDetails) => {
+        setEditingSlot(slot)
+        setShowEditModal(true)
+    }
+
+    const handleSaveEdit = async () => {
+        if (!editingSlot) return
+
+        setSaving(true)
+        try {
+            const { error } = await supabase
+                .from('timetable_slots')
+                .update({
+                    subject_id: editingSlot.subject_id,
+                    lecturer_id: editingSlot.lecturer_id,
+                    classroom_id: editingSlot.classroom_id
+                })
+                .eq('id', editingSlot.id)
+
+            if (error) throw error
+
+            toast({ title: 'Updated', description: 'Slot updated successfully' })
+            setShowEditModal(false)
+            setEditingSlot(null)
+            fetchData()
+        } catch (error) {
+            console.error('Error updating:', error)
+            toast({ title: 'Error', description: 'Failed to update slot', variant: 'destructive' })
+        } finally {
+            setSaving(false)
+        }
+    }
+
     // Add lab batch
     const addLabBatch = () => {
-        setLabBatches([...labBatches, { batch_name: `B${labBatches.length + 1}`, subject_id: '', lecturer_id: '' }])
+        setLabBatches([...labBatches, { batch_name: `B${labBatches.length + 1}`, subject_id: '', lecturer_id: '', classroom_id: '' }])
     }
 
     const updateLabBatch = (index: number, field: string, value: string) => {
@@ -659,12 +698,22 @@ export default function TimetableEditorPage() {
                                                 )}
                                             </div>
 
-                                            <button
-                                                onClick={() => handleDeleteSlot(slot.id)}
-                                                style={{ ...buttonStyle, background: '#fee2e2', color: '#dc2626', padding: '8px' }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                {slot.slot_type === 'class' && (
+                                                    <button
+                                                        onClick={() => handleEditSlot(slot)}
+                                                        style={{ ...buttonStyle, background: '#e0e7ff', color: '#4f46e5', padding: '8px' }}
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => handleDeleteSlot(slot.id)}
+                                                    style={{ ...buttonStyle, background: '#fee2e2', color: '#dc2626', padding: '8px' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                             </div>
@@ -893,7 +942,8 @@ export default function TimetableEditorPage() {
                                                             type="text"
                                                             value={batch.batch_name}
                                                             onChange={(e) => updateLabBatch(index, 'batch_name', e.target.value)}
-                                                            style={{ ...selectStyle, width: '80px' }}
+                                                            placeholder="Batch"
+                                                            style={{ ...selectStyle, width: '70px' }}
                                                         />
                                                         <button onClick={() => removeLabBatch(index)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
                                                             <X size={16} color="#dc2626" />
@@ -904,7 +954,7 @@ export default function TimetableEditorPage() {
                                                         onChange={(e) => updateLabBatch(index, 'subject_id', e.target.value)}
                                                         style={{ ...selectStyle, marginBottom: '8px', fontSize: '13px' }}
                                                     >
-                                                        <option value="">Select subject</option>
+                                                        <option value="">Subject *</option>
                                                         {subjects.map(s => (
                                                             <option key={s.id} value={s.id}>{s.code || s.name}</option>
                                                         ))}
@@ -912,11 +962,21 @@ export default function TimetableEditorPage() {
                                                     <select
                                                         value={batch.lecturer_id}
                                                         onChange={(e) => updateLabBatch(index, 'lecturer_id', e.target.value)}
-                                                        style={{ ...selectStyle, fontSize: '13px' }}
+                                                        style={{ ...selectStyle, marginBottom: '8px', fontSize: '13px' }}
                                                     >
-                                                        <option value="">Select lecturer</option>
+                                                        <option value="">Lecturer * (Required)</option>
                                                         {lecturers.map(l => (
                                                             <option key={l.id} value={l.id}>{l.short_name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={batch.classroom_id || ''}
+                                                        onChange={(e) => updateLabBatch(index, 'classroom_id', e.target.value)}
+                                                        style={{ ...selectStyle, fontSize: '13px' }}
+                                                    >
+                                                        <option value="">Classroom (Optional - uses main)</option>
+                                                        {classrooms.map(c => (
+                                                            <option key={c.id} value={c.id}>{c.name}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -947,6 +1007,99 @@ export default function TimetableEditorPage() {
                             </button>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Edit Modal */}
+            {showEditModal && editingSlot && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        background: 'white',
+                        borderRadius: '16px',
+                        padding: '24px',
+                        width: '400px',
+                        maxWidth: '90vw'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '18px', fontWeight: '600' }}>Edit Slot</h3>
+                            <button onClick={() => { setShowEditModal(false); setEditingSlot(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                <X size={20} color="#6b7280" />
+                            </button>
+                        </div>
+
+                        <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+                            {formatTime12(editingSlot.start_time)} - {formatTime12(editingSlot.end_time)}
+                        </p>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>Subject</label>
+                            <select
+                                value={editingSlot.subject_id || ''}
+                                onChange={(e) => setEditingSlot({ ...editingSlot, subject_id: e.target.value })}
+                                style={selectStyle}
+                            >
+                                <option value="">Select subject</option>
+                                {subjects.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>Lecturer</label>
+                            <select
+                                value={editingSlot.lecturer_id || ''}
+                                onChange={(e) => setEditingSlot({ ...editingSlot, lecturer_id: e.target.value })}
+                                style={selectStyle}
+                            >
+                                <option value="">Select lecturer</option>
+                                {lecturers.map(l => (
+                                    <option key={l.id} value={l.id}>{l.full_name} ({l.short_name})</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ marginBottom: '24px' }}>
+                            <label style={labelStyle}>Classroom</label>
+                            <select
+                                value={editingSlot.classroom_id || ''}
+                                onChange={(e) => setEditingSlot({ ...editingSlot, classroom_id: e.target.value })}
+                                style={selectStyle}
+                            >
+                                <option value="">Select classroom</option>
+                                {classrooms.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                onClick={() => { setShowEditModal(false); setEditingSlot(null); }}
+                                style={{ ...buttonStyle, flex: 1, background: '#f3f4f6' }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveEdit}
+                                disabled={saving}
+                                style={{ ...buttonStyle, flex: 1, background: '#4f46e5', color: 'white' }}
+                            >
+                                {saving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
