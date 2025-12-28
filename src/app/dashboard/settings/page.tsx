@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
-import { Save, Building, Clock, Calendar } from 'lucide-react'
+import { Save, Building, Clock, Calendar, Coffee, UtensilsCrossed } from 'lucide-react'
 
 interface CollegeSettings {
     college_name: string
@@ -12,6 +12,7 @@ interface CollegeSettings {
     default_class_duration: number
     lunch_start_time: string
     lunch_end_time: string
+    break_duration: number
     working_days: string[]
 }
 
@@ -25,6 +26,7 @@ export default function SettingsPage() {
         default_class_duration: 55,
         lunch_start_time: '12:30',
         lunch_end_time: '13:30',
+        break_duration: 15,
         working_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     })
     const [loading, setLoading] = useState(false)
@@ -69,6 +71,7 @@ export default function SettingsPage() {
                     default_class_duration: data.default_class_duration || 55,
                     lunch_start_time: data.lunch_start_time || '12:30',
                     lunch_end_time: data.lunch_end_time || '13:30',
+                    break_duration: data.break_duration || 15,
                     working_days: data.working_days || allDays
                 })
             }
@@ -100,12 +103,20 @@ export default function SettingsPage() {
             }, { onConflict: 'user_id' })
 
             if (error) {
+                console.error('Save error:', error)
                 toast({ title: 'Error', description: error.message, variant: 'destructive' })
             } else {
                 toast({ title: 'Saved', description: 'Settings updated successfully' })
             }
         }
         setSaving(false)
+    }
+
+    // Calculate lunch duration
+    const getLunchDuration = () => {
+        const [startH, startM] = settings.lunch_start_time.split(':').map(Number)
+        const [endH, endM] = settings.lunch_end_time.split(':').map(Number)
+        return (endH * 60 + endM) - (startH * 60 + startM)
     }
 
     if (loading) {
@@ -177,8 +188,8 @@ export default function SettingsPage() {
                         />
                     </div>
                 </div>
-                <div style={{ marginBottom: '20px' }}>
-                    <label style={labelStyle}>Class Duration (minutes)</label>
+                <div>
+                    <label style={labelStyle}>Class/Period Duration (minutes)</label>
                     <input
                         type="number"
                         value={settings.default_class_duration}
@@ -188,9 +199,23 @@ export default function SettingsPage() {
                         style={inputStyle}
                     />
                 </div>
+            </div>
+
+            {/* Lunch Break */}
+            <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '24px',
+                marginBottom: '24px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <UtensilsCrossed size={20} />
+                    Lunch Break
+                </h2>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <div>
-                        <label style={labelStyle}>Lunch Start</label>
+                        <label style={labelStyle}>Lunch Start Time</label>
                         <input
                             type="time"
                             value={settings.lunch_start_time}
@@ -199,7 +224,7 @@ export default function SettingsPage() {
                         />
                     </div>
                     <div>
-                        <label style={labelStyle}>Lunch End</label>
+                        <label style={labelStyle}>Lunch End Time</label>
                         <input
                             type="time"
                             value={settings.lunch_end_time}
@@ -207,6 +232,37 @@ export default function SettingsPage() {
                             style={inputStyle}
                         />
                     </div>
+                </div>
+                <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+                    Lunch duration: {getLunchDuration()} minutes
+                </p>
+            </div>
+
+            {/* Short Break */}
+            <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '24px',
+                marginBottom: '24px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Coffee size={20} />
+                    Short Break (Tea/Coffee Break)
+                </h2>
+                <div>
+                    <label style={labelStyle}>Break Duration (minutes)</label>
+                    <input
+                        type="number"
+                        value={settings.break_duration}
+                        onChange={(e) => setSettings({ ...settings, break_duration: parseInt(e.target.value) || 15 })}
+                        min="5"
+                        max="30"
+                        style={inputStyle}
+                    />
+                    <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '8px' }}>
+                        This is the duration for short breaks (not lunch). Default: 15 minutes.
+                    </p>
                 </div>
             </div>
 

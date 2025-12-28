@@ -50,6 +50,7 @@ interface CollegeSettings {
     default_class_duration: number
     lunch_start_time: string
     lunch_end_time: string
+    break_duration: number
     working_days: string[]
 }
 
@@ -283,13 +284,27 @@ export default function TimetableEditorPage() {
 
         setSaving(true)
         try {
-            const nextSlot = getNextTimeSlot(selectedDay, numberOfPeriods)
+            // Calculate duration based on slot type
+            let slotDuration: number
+            if (slotType === 'break') {
+                slotDuration = settings?.break_duration || 15
+            } else if (slotType === 'lunch') {
+                // Calculate lunch duration from start and end time
+                const [startH, startM] = (settings?.lunch_start_time || '12:30').split(':').map(Number)
+                const [endH, endM] = (settings?.lunch_end_time || '13:30').split(':').map(Number)
+                slotDuration = (endH * 60 + endM) - (startH * 60 + startM)
+            } else {
+                slotDuration = (settings?.default_class_duration || 55) * numberOfPeriods
+            }
+
+            const nextSlot = getNextTimeSlot(selectedDay, slotType === 'class' ? numberOfPeriods : 1)
+            const endTime = addMinutes(nextSlot.start, slotDuration)
 
             let slotData: any = {
                 timetable_id: id,
                 day_of_week: selectedDay,
                 start_time: nextSlot.start,
-                end_time: nextSlot.end,
+                end_time: endTime,
                 slot_order: nextSlot.order,
                 slot_type: slotType,
                 is_practical: isPractical
