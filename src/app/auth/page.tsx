@@ -1,36 +1,23 @@
 'use client'
 
-import { useState, useEffect, FormEvent, MouseEvent } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, ArrowLeft, Loader2, Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-type ViewMode = 'initial' | 'login' | 'signup'
-
 export default function AuthPage() {
-    const [view, setView] = useState<ViewMode>('initial')
+    const [mode, setMode] = useState<'choose' | 'login' | 'signup'>('choose')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [fullName, setFullName] = useState('')
     const [loading, setLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
-    const [mounted, setMounted] = useState(false)
 
     const router = useRouter()
     const supabase = createClient()
     const { toast } = useToast()
 
-    // Ensure component is mounted before enabling interactions
-    useEffect(() => {
-        setMounted(true)
-    }, [])
-
-    // Check if user is already logged in
     useEffect(() => {
         const checkUser = async () => {
             const { data: { user } } = await supabase.auth.getUser()
@@ -41,409 +28,426 @@ export default function AuthPage() {
         checkUser()
     }, [])
 
-    const handleSignInClick = (e: MouseEvent<HTMLButtonElement>) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
-        e.stopPropagation()
-        console.log('Sign In clicked')
-        setView('login')
-        setPassword('')
-        setFullName('')
-    }
-
-    const handleCreateAccountClick = (e: MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        e.stopPropagation()
-        console.log('Create Account clicked')
-        setView('signup')
-        setPassword('')
-    }
-
-    const handleBackClick = (e: MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault()
-        e.stopPropagation()
-        console.log('Back clicked')
-        setView('initial')
-        setEmail('')
-        setPassword('')
-        setFullName('')
-    }
-
-    const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault()
-        console.log('Login form submitted')
-
         if (!email || !password) {
-            toast({
-                title: 'Missing Fields',
-                description: 'Please enter both email and password',
-                variant: 'destructive'
-            })
+            toast({ title: 'Error', description: 'Please fill all fields', variant: 'destructive' })
             return
         }
 
         setLoading(true)
-        try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email: email.trim(),
-                password,
-            })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-            if (error) {
-                console.error('Login error:', error)
-                toast({
-                    title: 'Login Failed',
-                    description: error.message.includes('Invalid login credentials')
-                        ? 'Invalid email or password'
-                        : error.message,
-                    variant: 'destructive'
-                })
-            } else if (data.user) {
-                toast({
-                    title: 'Welcome Back!',
-                    description: 'Successfully logged in',
-                })
+        if (error) {
+            toast({ title: 'Login Failed', description: error.message, variant: 'destructive' })
+        } else if (data.user) {
+            toast({ title: 'Welcome!', description: 'Login successful' })
+            const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('is_onboarded')
+                .eq('user_id', data.user.id)
+                .single()
 
-                // Check onboarding status
-                const { data: profile } = await supabase
-                    .from('user_profiles')
-                    .select('is_onboarded')
-                    .eq('user_id', data.user.id)
-                    .single()
-
-                if (!profile || !profile.is_onboarded) {
-                    router.push('/onboarding')
-                } else {
-                    router.push('/dashboard')
-                }
-            }
-        } catch (error) {
-            console.error('Login exception:', error)
-            toast({
-                title: 'Error',
-                description: 'An unexpected error occurred',
-                variant: 'destructive'
-            })
-        } finally {
-            setLoading(false)
+            router.push(profile?.is_onboarded ? '/dashboard' : '/onboarding')
         }
+        setLoading(false)
     }
 
-    const handleSignUp = async (e: FormEvent<HTMLFormElement>) => {
+    const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault()
-        console.log('Signup form submitted')
-
         if (!email || !password || !fullName) {
-            toast({
-                title: 'Missing Fields',
-                description: 'Please fill in all fields',
-                variant: 'destructive'
-            })
+            toast({ title: 'Error', description: 'Please fill all fields', variant: 'destructive' })
             return
         }
-
         if (password.length < 6) {
-            toast({
-                title: 'Password Too Short',
-                description: 'Password must be at least 6 characters',
-                variant: 'destructive'
-            })
+            toast({ title: 'Error', description: 'Password must be at least 6 characters', variant: 'destructive' })
             return
         }
 
         setLoading(true)
-        try {
-            console.log('Attempting signup for:', email.trim())
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { full_name: fullName } }
+        })
 
-            const { data, error } = await supabase.auth.signUp({
-                email: email.trim(),
-                password,
-                options: {
-                    data: {
-                        full_name: fullName.trim()
-                    }
-                }
-            })
-
-            console.log('Signup response:', { data, error })
-
-            if (error) {
-                console.error('Signup error:', error)
-                toast({
-                    title: 'Sign Up Failed',
-                    description: error.message,
-                    variant: 'destructive'
-                })
-                return
+        if (error) {
+            toast({ title: 'Signup Failed', description: error.message, variant: 'destructive' })
+        } else if (data.user) {
+            if (data.session) {
+                toast({ title: 'Account Created!', description: 'Welcome to TimeTable Pro' })
+                router.push('/onboarding')
+            } else {
+                toast({ title: 'Check Email', description: 'Please verify your email' })
+                setMode('login')
             }
-
-            if (data.user) {
-                if (data.session) {
-                    // User is logged in, redirect to onboarding
-                    toast({
-                        title: 'Account Created!',
-                        description: 'Welcome to TimeTable Pro',
-                    })
-                    router.push('/onboarding')
-                } else {
-                    // Email confirmation required
-                    toast({
-                        title: 'Check Your Email',
-                        description: 'Please verify your email to continue',
-                    })
-                    setView('login')
-                }
-            }
-        } catch (error) {
-            console.error('Signup exception:', error)
-            toast({
-                title: 'Error',
-                description: 'An unexpected error occurred',
-                variant: 'destructive'
-            })
-        } finally {
-            setLoading(false)
         }
-    }
-
-    // Don't render interactive elements until mounted
-    if (!mounted) {
-        return (
-            <div className="min-h-screen flex items-center justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        )
+        setLoading(false)
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-            {/* Background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-purple-950 -z-10 pointer-events-none" />
-            <div className="absolute inset-0 hero-gradient dot-pattern -z-10 pointer-events-none" />
-            <div className="absolute top-20 left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl -z-10 pointer-events-none" />
-            <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl -z-10 pointer-events-none" />
-
-            <div className="relative z-50 w-full max-w-md px-6">
+        <div style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            padding: '20px'
+        }}>
+            <div style={{
+                width: '100%',
+                maxWidth: '400px',
+                background: 'white',
+                borderRadius: '16px',
+                padding: '40px',
+                boxShadow: '0 25px 50px rgba(0,0,0,0.25)'
+            }}>
                 {/* Logo */}
-                <div className="text-center mb-8">
-                    <Link href="/" className="inline-flex items-center space-x-2">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center">
-                            <Calendar className="w-7 h-7 text-white" />
-                        </div>
-                        <span className="text-2xl font-bold text-gradient">TimeTable Pro</span>
-                    </Link>
+                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                    <div style={{
+                        width: '60px',
+                        height: '60px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        borderRadius: '12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '10px'
+                    }}>
+                        <span style={{ fontSize: '28px' }}>📅</span>
+                    </div>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a1a2e', margin: 0 }}>
+                        TimeTable Pro
+                    </h1>
                 </div>
 
-                <Card className="premium-card border-0 shadow-2xl relative z-50">
-                    <CardHeader className="space-y-1 pb-4">
-                        <CardTitle className="text-2xl text-center">
-                            {view === 'initial' && 'Welcome'}
-                            {view === 'login' && 'Sign In'}
-                            {view === 'signup' && 'Create Account'}
-                        </CardTitle>
-                        <CardDescription className="text-center">
-                            {view === 'initial' && 'Sign in to your account or create a new one'}
-                            {view === 'login' && 'Enter your credentials to continue'}
-                            {view === 'signup' && 'Fill in the details to get started'}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {/* Initial View */}
-                        {view === 'initial' && (
-                            <div className="space-y-4">
+                {/* Choose Mode */}
+                {mode === 'choose' && (
+                    <div>
+                        <h2 style={{ textAlign: 'center', fontSize: '20px', marginBottom: '10px', color: '#333' }}>
+                            Welcome
+                        </h2>
+                        <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px', fontSize: '14px' }}>
+                            Sign in or create a new account
+                        </p>
+
+                        <button
+                            onClick={() => setMode('login')}
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                color: 'white',
+                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                border: 'none',
+                                borderRadius: '10px',
+                                cursor: 'pointer',
+                                marginBottom: '12px'
+                            }}
+                        >
+                            Sign In
+                        </button>
+
+                        <button
+                            onClick={() => setMode('signup')}
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                color: '#333',
+                                background: 'white',
+                                border: '2px solid #e0e0e0',
+                                borderRadius: '10px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Create New Account
+                        </button>
+                    </div>
+                )}
+
+                {/* Login Form */}
+                {mode === 'login' && (
+                    <form onSubmit={handleLogin}>
+                        <h2 style={{ textAlign: 'center', fontSize: '20px', marginBottom: '25px', color: '#333' }}>
+                            Sign In
+                        </h2>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#333' }}>
+                                Email
+                            </label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                required
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    fontSize: '16px',
+                                    border: '2px solid #e0e0e0',
+                                    borderRadius: '8px',
+                                    outline: 'none',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#333' }}>
+                                Password
+                            </label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Enter password"
+                                    required
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        paddingRight: '45px',
+                                        fontSize: '16px',
+                                        border: '2px solid #e0e0e0',
+                                        borderRadius: '8px',
+                                        outline: 'none',
+                                        boxSizing: 'border-box'
+                                    }}
+                                />
                                 <button
                                     type="button"
-                                    onClick={handleSignInClick}
-                                    className="w-full h-12 rounded-lg font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl cursor-pointer"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '12px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        color: '#666'
+                                    }}
                                 >
-                                    Sign In
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleCreateAccountClick}
-                                    className="w-full h-12 rounded-lg font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 cursor-pointer"
-                                >
-                                    Create New Account
+                                    {showPassword ? '🙈' : '👁️'}
                                 </button>
                             </div>
-                        )}
+                        </div>
 
-                        {/* Login View */}
-                        {view === 'login' && (
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="login-email">Email Address</Label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            id="login-email"
-                                            type="email"
-                                            placeholder="you@example.com"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="pl-10 h-12"
-                                            required
-                                            autoComplete="email"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="login-password">Password</Label>
-                                    <div className="relative">
-                                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            id="login-password"
-                                            type={showPassword ? 'text' : 'password'}
-                                            placeholder="Enter your password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="pl-10 pr-10 h-12"
-                                            required
-                                            autoComplete="current-password"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
-                                        >
-                                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </button>
-                                    </div>
-                                </div>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                color: 'white',
+                                background: loading ? '#aaa' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                border: 'none',
+                                borderRadius: '10px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                marginBottom: '16px'
+                            }}
+                        >
+                            {loading ? 'Signing in...' : 'Sign In'}
+                        </button>
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                type="button"
+                                onClick={() => { setMode('choose'); setEmail(''); setPassword(''); }}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    fontSize: '14px',
+                                    color: '#666',
+                                    background: '#f5f5f5',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ← Back
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setMode('signup'); setPassword(''); }}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    fontSize: '14px',
+                                    color: '#666',
+                                    background: '#f5f5f5',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Create Account
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {/* Signup Form */}
+                {mode === 'signup' && (
+                    <form onSubmit={handleSignup}>
+                        <h2 style={{ textAlign: 'center', fontSize: '20px', marginBottom: '25px', color: '#333' }}>
+                            Create Account
+                        </h2>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#333' }}>
+                                Full Name
+                            </label>
+                            <input
+                                type="text"
+                                value={fullName}
+                                onChange={(e) => setFullName(e.target.value)}
+                                placeholder="Your full name"
+                                required
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    fontSize: '16px',
+                                    border: '2px solid #e0e0e0',
+                                    borderRadius: '8px',
+                                    outline: 'none',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#333' }}>
+                                Email
+                            </label>
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                required
+                                style={{
+                                    width: '100%',
+                                    padding: '12px',
+                                    fontSize: '16px',
+                                    border: '2px solid #e0e0e0',
+                                    borderRadius: '8px',
+                                    outline: 'none',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500', color: '#333' }}>
+                                Password
+                            </label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Min 6 characters"
+                                    required
+                                    minLength={6}
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px',
+                                        paddingRight: '45px',
+                                        fontSize: '16px',
+                                        border: '2px solid #e0e0e0',
+                                        borderRadius: '8px',
+                                        outline: 'none',
+                                        boxSizing: 'border-box'
+                                    }}
+                                />
                                 <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full h-12 rounded-lg font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '12px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '14px',
+                                        color: '#666'
+                                    }}
                                 >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                            Signing in...
-                                        </>
-                                    ) : (
-                                        'Sign In'
-                                    )}
+                                    {showPassword ? '🙈' : '👁️'}
                                 </button>
-                                <div className="flex gap-2 pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleBackClick}
-                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors cursor-pointer"
-                                    >
-                                        <ArrowLeft className="w-4 h-4 mr-1" />
-                                        Back
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleCreateAccountClick}
-                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors cursor-pointer"
-                                    >
-                                        Create Account
-                                    </button>
-                                </div>
-                            </form>
-                        )}
+                            </div>
+                        </div>
 
-                        {/* Signup View */}
-                        {view === 'signup' && (
-                            <form onSubmit={handleSignUp} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="signup-name">Full Name</Label>
-                                    <div className="relative">
-                                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            id="signup-name"
-                                            type="text"
-                                            placeholder="Enter your full name"
-                                            value={fullName}
-                                            onChange={(e) => setFullName(e.target.value)}
-                                            className="pl-10 h-12"
-                                            required
-                                            autoComplete="name"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="signup-email">Email Address</Label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            id="signup-email"
-                                            type="email"
-                                            placeholder="you@example.com"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="pl-10 h-12"
-                                            required
-                                            autoComplete="email"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="signup-password">Password</Label>
-                                    <div className="relative">
-                                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
-                                        <Input
-                                            id="signup-password"
-                                            type={showPassword ? 'text' : 'password'}
-                                            placeholder="Create a password (min 6 characters)"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="pl-10 pr-10 h-12"
-                                            required
-                                            autoComplete="new-password"
-                                            minLength={6}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
-                                        >
-                                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </button>
-                                    </div>
-                                </div>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    className="w-full h-12 rounded-lg font-medium text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center cursor-pointer"
-                                >
-                                    {loading ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                            Creating account...
-                                        </>
-                                    ) : (
-                                        'Create Account'
-                                    )}
-                                </button>
-                                <div className="flex gap-2 pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleBackClick}
-                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors cursor-pointer"
-                                    >
-                                        <ArrowLeft className="w-4 h-4 mr-1" />
-                                        Back
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleSignInClick}
-                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors cursor-pointer"
-                                    >
-                                        Sign In Instead
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-                    </CardContent>
-                </Card>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                color: 'white',
+                                background: loading ? '#aaa' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                border: 'none',
+                                borderRadius: '10px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                marginBottom: '16px'
+                            }}
+                        >
+                            {loading ? 'Creating...' : 'Create Account'}
+                        </button>
 
-                {/* Back to home link */}
-                <div className="mt-6 text-center">
-                    <Link
-                        href="/"
-                        className="text-sm text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400"
-                    >
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                type="button"
+                                onClick={() => { setMode('choose'); setEmail(''); setPassword(''); setFullName(''); }}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    fontSize: '14px',
+                                    color: '#666',
+                                    background: '#f5f5f5',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                ← Back
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setMode('login'); setPassword(''); setFullName(''); }}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px',
+                                    fontSize: '14px',
+                                    color: '#666',
+                                    background: '#f5f5f5',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Sign In Instead
+                            </button>
+                        </div>
+                    </form>
+                )}
+
+                {/* Back to Home */}
+                <div style={{ textAlign: 'center', marginTop: '25px' }}>
+                    <Link href="/" style={{ color: '#667eea', textDecoration: 'none', fontSize: '14px' }}>
                         ← Back to Home
                     </Link>
                 </div>

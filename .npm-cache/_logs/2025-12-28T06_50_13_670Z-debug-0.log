@@ -7,13 +7,13 @@
 6 silly config load:file:C:\Users\shree\AppData\Roaming\npm\etc\npmrc
 7 verbose title npm run build
 8 verbose argv "run" "build"
-9 verbose logfile logs-max:10 dir:D:\TT_TOOL\.npm-cache\_logs\2025-12-28T04_00_59_256Z-
-10 verbose logfile D:\TT_TOOL\.npm-cache\_logs\2025-12-28T04_00_59_256Z-debug-0.log
+9 verbose logfile logs-max:10 dir:D:\TT_TOOL\.npm-cache\_logs\2025-12-28T06_50_13_670Z-
+10 verbose logfile D:\TT_TOOL\.npm-cache\_logs\2025-12-28T06_50_13_670Z-debug-0.log
 11 silly logfile start cleaning logs, removing 1 files
 12 silly logfile done cleaning log files
 13 verbose cwd D:\TT_TOOL
 14 verbose os Windows_NT 10.0.26200
 15 verbose node v22.18.0
 16 verbose npm  v10.9.3
-17 verbose exit 1
-18 verbose code 1
+17 verbose exit 0
+18 info ok
