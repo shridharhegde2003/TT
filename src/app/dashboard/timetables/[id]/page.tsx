@@ -77,8 +77,10 @@ interface LabBatch {
     batch_name: string
     subject_id: string | null
     lecturer_id: string | null
+    classroom_id?: string | null
     subject?: Subject
     lecturer?: Lecturer
+    classroom?: Classroom
 }
 
 interface SlotWithDetails extends TimetableSlot {
@@ -477,9 +479,29 @@ export default function TimetableEditorPage() {
     }
 
     // Edit slot functions
+    const [editingBatches, setEditingBatches] = useState<{ id?: string, batch_name: string, subject_id: string, lecturer_id: string, classroom_id?: string }[]>([])
+
     const handleEditSlot = (slot: SlotWithDetails) => {
         setEditingSlot(slot)
+        // If practical, load the batches for editing
+        if (slot.is_practical && slot.lab_batches) {
+            setEditingBatches(slot.lab_batches.map(b => ({
+                id: b.id,
+                batch_name: b.batch_name,
+                subject_id: b.subject_id || '',
+                lecturer_id: b.lecturer_id || '',
+                classroom_id: b.classroom_id || ''
+            })))
+        } else {
+            setEditingBatches([])
+        }
         setShowEditModal(true)
+    }
+
+    const updateEditingBatch = (index: number, field: string, value: string) => {
+        const updated = [...editingBatches]
+        updated[index] = { ...updated[index], [field]: value }
+        setEditingBatches(updated)
     }
 
     const handleSaveEdit = async () => {
@@ -487,20 +509,44 @@ export default function TimetableEditorPage() {
 
         setSaving(true)
         try {
-            const { error } = await supabase
-                .from('timetable_slots')
-                .update({
-                    subject_id: editingSlot.subject_id,
-                    lecturer_id: editingSlot.lecturer_id,
-                    classroom_id: editingSlot.classroom_id
-                })
-                .eq('id', editingSlot.id)
+            if (editingSlot.is_practical) {
+                // Update each batch
+                for (const batch of editingBatches) {
+                    if (batch.id) {
+                        await supabase
+                            .from('lab_batches')
+                            .update({
+                                batch_name: batch.batch_name,
+                                subject_id: batch.subject_id || null,
+                                lecturer_id: batch.lecturer_id || null,
+                                classroom_id: batch.classroom_id || null
+                            })
+                            .eq('id', batch.id)
+                    }
+                }
+                // Also update main classroom if changed
+                await supabase
+                    .from('timetable_slots')
+                    .update({ classroom_id: editingSlot.classroom_id })
+                    .eq('id', editingSlot.id)
+            } else {
+                // Theory class - update subject, lecturer, classroom
+                const { error } = await supabase
+                    .from('timetable_slots')
+                    .update({
+                        subject_id: editingSlot.subject_id,
+                        lecturer_id: editingSlot.lecturer_id,
+                        classroom_id: editingSlot.classroom_id
+                    })
+                    .eq('id', editingSlot.id)
 
-            if (error) throw error
+                if (error) throw error
+            }
 
             toast({ title: 'Updated', description: 'Slot updated successfully' })
             setShowEditModal(false)
             setEditingSlot(null)
+            setEditingBatches([])
             fetchData()
         } catch (error) {
             console.error('Error updating:', error)
@@ -1040,53 +1086,117 @@ export default function TimetableEditorPage() {
 
                         <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
                             {formatTime12(editingSlot.start_time)} - {formatTime12(editingSlot.end_time)}
+                            {editingSlot.is_practical && <span style={{ marginLeft: '8px', padding: '2px 8px', background: '#d1fae5', color: '#059669', borderRadius: '4px', fontSize: '11px' }}>Practical</span>}
                         </p>
 
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={labelStyle}>Subject</label>
-                            <select
-                                value={editingSlot.subject_id || ''}
-                                onChange={(e) => setEditingSlot({ ...editingSlot, subject_id: e.target.value })}
-                                style={selectStyle}
-                            >
-                                <option value="">Select subject</option>
-                                {subjects.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* Theory class form */}
+                        {!editingSlot.is_practical && (
+                            <>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={labelStyle}>Subject</label>
+                                    <select
+                                        value={editingSlot.subject_id || ''}
+                                        onChange={(e) => setEditingSlot({ ...editingSlot, subject_id: e.target.value })}
+                                        style={selectStyle}
+                                    >
+                                        <option value="">Select subject</option>
+                                        {subjects.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={labelStyle}>Lecturer</label>
-                            <select
-                                value={editingSlot.lecturer_id || ''}
-                                onChange={(e) => setEditingSlot({ ...editingSlot, lecturer_id: e.target.value })}
-                                style={selectStyle}
-                            >
-                                <option value="">Select lecturer</option>
-                                {lecturers.map(l => (
-                                    <option key={l.id} value={l.id}>{l.full_name} ({l.short_name})</option>
-                                ))}
-                            </select>
-                        </div>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={labelStyle}>Lecturer</label>
+                                    <select
+                                        value={editingSlot.lecturer_id || ''}
+                                        onChange={(e) => setEditingSlot({ ...editingSlot, lecturer_id: e.target.value })}
+                                        style={selectStyle}
+                                    >
+                                        <option value="">Select lecturer</option>
+                                        {lecturers.map(l => (
+                                            <option key={l.id} value={l.id}>{l.full_name} ({l.short_name})</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        <div style={{ marginBottom: '24px' }}>
-                            <label style={labelStyle}>Classroom</label>
-                            <select
-                                value={editingSlot.classroom_id || ''}
-                                onChange={(e) => setEditingSlot({ ...editingSlot, classroom_id: e.target.value })}
-                                style={selectStyle}
-                            >
-                                <option value="">Select classroom</option>
-                                {classrooms.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label style={labelStyle}>Classroom</label>
+                                    <select
+                                        value={editingSlot.classroom_id || ''}
+                                        onChange={(e) => setEditingSlot({ ...editingSlot, classroom_id: e.target.value })}
+                                        style={selectStyle}
+                                    >
+                                        <option value="">Select classroom</option>
+                                        {classrooms.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Practical/Lab class form - edit batches */}
+                        {editingSlot.is_practical && (
+                            <>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={labelStyle}>Main Classroom/Lab</label>
+                                    <select
+                                        value={editingSlot.classroom_id || ''}
+                                        onChange={(e) => setEditingSlot({ ...editingSlot, classroom_id: e.target.value })}
+                                        style={selectStyle}
+                                    >
+                                        <option value="">Select main lab</option>
+                                        {classrooms.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <label style={labelStyle}>Batches ({editingBatches.length})</label>
+                                <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '16px' }}>
+                                    {editingBatches.map((batch, index) => (
+                                        <div key={batch.id || index} style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px', marginBottom: '8px' }}>
+                                            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#374151' }}>{batch.batch_name}</div>
+                                            <select
+                                                value={batch.subject_id}
+                                                onChange={(e) => updateEditingBatch(index, 'subject_id', e.target.value)}
+                                                style={{ ...selectStyle, marginBottom: '8px', fontSize: '13px' }}
+                                            >
+                                                <option value="">Subject *</option>
+                                                {subjects.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.code || s.name}</option>
+                                                ))}
+                                            </select>
+                                            <select
+                                                value={batch.lecturer_id}
+                                                onChange={(e) => updateEditingBatch(index, 'lecturer_id', e.target.value)}
+                                                style={{ ...selectStyle, marginBottom: '8px', fontSize: '13px' }}
+                                            >
+                                                <option value="">Lecturer * (Required)</option>
+                                                {lecturers.map(l => (
+                                                    <option key={l.id} value={l.id}>{l.short_name}</option>
+                                                ))}
+                                            </select>
+                                            <select
+                                                value={batch.classroom_id || ''}
+                                                onChange={(e) => updateEditingBatch(index, 'classroom_id', e.target.value)}
+                                                style={{ ...selectStyle, fontSize: '13px' }}
+                                            >
+                                                <option value="">Classroom (Optional)</option>
+                                                {classrooms.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
 
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <button
-                                onClick={() => { setShowEditModal(false); setEditingSlot(null); }}
+                                onClick={() => { setShowEditModal(false); setEditingSlot(null); setEditingBatches([]); }}
                                 style={{ ...buttonStyle, flex: 1, background: '#f3f4f6' }}
                             >
                                 Cancel
