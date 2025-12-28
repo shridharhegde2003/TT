@@ -55,7 +55,8 @@ export default function NewTimetablePage() {
                 semester,
                 section,
                 year: academicYear,
-                status: 'in_progress'
+                status: 'in_progress',
+                timetable_data: {}
             }).select().single()
 
             if (error) {
