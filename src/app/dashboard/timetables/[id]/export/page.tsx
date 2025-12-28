@@ -67,7 +67,6 @@ export default function ExportTimetable() {
 
     const fetchData = async () => {
         try {
-            // Fetch timetable
             const { data: ttData, error: ttError } = await supabase
                 .from('timetables')
                 .select('*')
@@ -76,14 +75,12 @@ export default function ExportTimetable() {
             if (ttError) throw ttError
             setTimetable(ttData)
 
-            // Fetch settings
             const { data: settingsData } = await supabase
                 .from('college_settings')
                 .select('*')
                 .single()
             setSettings(settingsData)
 
-            // Fetch all related data
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
@@ -99,7 +96,6 @@ export default function ExportTimetable() {
                 supabase.from('classrooms').select('*').eq('user_id', user.id)
             ])
 
-            // Fetch lab batches
             const slotIds = (slotsData || []).map(s => s.id)
             let batchesData: any[] = []
             if (slotIds.length > 0) {
@@ -107,7 +103,6 @@ export default function ExportTimetable() {
                 batchesData = bData || []
             }
 
-            // JOIN data manually
             const joinedSlots = (slotsData || []).map(slot => {
                 const batches = batchesData.filter(b => b.timetable_slot_id === slot.id).map(b => ({
                     ...b,
@@ -135,7 +130,6 @@ export default function ExportTimetable() {
         }
     }
 
-    // Time Helpers
     const toMinutes = (time: string) => {
         if (!time) return 0
         const [h, m] = time.split(':').map(Number)
@@ -156,72 +150,93 @@ export default function ExportTimetable() {
         return `${hour12}:${String(mins).padStart(2, '0')} ${period}`
     }
 
-    // Generate Standard Grid based ONLY on Settings (Standard Periods)
-    const generateStandardGrid = () => {
+    // Adaptive Grid Generation
+    const generateAdaptiveGrid = () => {
         if (!settings) return []
 
-        const grid: { start: string, end: string, type: 'class' | 'lunch' }[] = []
-        let current = toMinutes(settings.college_start_time)
-        const end = toMinutes(settings.college_end_time)
+        const collegeStart = toMinutes(settings.college_start_time)
+        const collegeEnd = toMinutes(settings.college_end_time)
         const lunchStart = toMinutes(settings.lunch_start_time)
         const lunchEnd = toMinutes(settings.lunch_end_time)
         const duration = settings.default_class_duration || 60
 
-        while (current < end) {
-            // Is it Lunch?
-            if (current === lunchStart) {
-                grid.push({
-                    start: settings.lunch_start_time,
-                    end: settings.lunch_end_time,
-                    type: 'lunch'
-                })
-                current = lunchEnd
-                continue
-            }
+        // 1. Collect all Key Time Points
+        const timePoints = new Set<number>()
+        timePoints.add(collegeStart)
+        timePoints.add(collegeEnd)
+        if (lunchStart) timePoints.add(lunchStart)
+        if (lunchEnd) timePoints.add(lunchEnd)
 
-            // Normal Slot
-            let next = current + duration
-            // Cap at lunch
-            if (current < lunchStart && next > lunchStart) {
-                next = lunchStart
-            }
-            // Cap at end
-            if (next > end) next = end
+        // Add Slot Boundaries
+        slots.forEach(s => {
+            timePoints.add(toMinutes(s.start_time))
+            timePoints.add(toMinutes(s.end_time))
+        })
 
-            if (next > current) {
-                grid.push({
-                    start: fromMinutes(current),
-                    end: fromMinutes(next),
-                    type: 'class'
-                })
-            }
-            current = next
+        // Add Standard Intervals
+        let t = collegeStart
+        while (t < collegeEnd) {
+            timePoints.add(t)
+            t += duration
         }
+
+        // 2. Sort and Create Intervals
+        const sortedPoints = Array.from(timePoints).sort((a, b) => a - b)
+
+        // Filter points within range
+        const validPoints = sortedPoints.filter(p => p >= collegeStart && p <= collegeEnd)
+
+        const grid: { start: string, end: string, type: string }[] = []
+
+        for (let i = 0; i < validPoints.length - 1; i++) {
+            const start = validPoints[i]
+            const end = validPoints[i + 1]
+            const diff = end - start
+
+            // Ignore tiny intervals (e.g. < 5 mins) unless they are explicitly slots? 
+            // Better only ignore < 1 min to avoid float errors
+            if (diff < 1) continue
+
+            // Determine Type
+            let type = 'class'
+
+            // Check if Lunch
+            if (Math.abs(start - lunchStart) < 1 && Math.abs(end - lunchEnd) < 1) {
+                type = 'lunch'
+            }
+            else if (start >= lunchStart && end <= lunchEnd) {
+                type = 'lunch'
+            }
+
+            grid.push({
+                start: fromMinutes(start),
+                end: fromMinutes(end),
+                type
+            })
+        }
+
         return grid
     }
 
-    const timeSlots = generateStandardGrid()
+    const timeSlots = generateAdaptiveGrid()
     const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     const workingDays = (settings?.working_days || []).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b))
 
-    // Helper: Find slot and calculate Span (how many Grid Rows/Cols it covers)
     const findSlotAndSpan = (day: string, slotStartMins: number) => {
-        // Find existing slot in data that starts approx at this time
         const slot = slots.find(s =>
             s.day_of_week === day &&
-            Math.abs(toMinutes(s.start_time) - slotStartMins) < 5
+            Math.abs(toMinutes(s.start_time) - slotStartMins) < 2 // tighter tolerance
         )
 
         if (!slot) return { slot: undefined, span: 1 }
 
-        // Calculate Span by checking coverage against 'timeSlots'
         let span = 1
-        const startIndex = timeSlots.findIndex(t => Math.abs(toMinutes(t.start) - slotStartMins) < 5)
+        const startIndex = timeSlots.findIndex(t => Math.abs(toMinutes(t.start) - slotStartMins) < 2)
 
         if (startIndex !== -1) {
             for (let i = startIndex + 1; i < timeSlots.length; i++) {
                 const gridSlotEnd = toMinutes(timeSlots[i].end)
-                // tolerance of 1 min
+                // tolerance
                 if (gridSlotEnd <= toMinutes(slot.end_time) + 1) {
                     span++
                 } else {
@@ -233,8 +248,7 @@ export default function ExportTimetable() {
         return { slot, span }
     }
 
-    // State for tracking rendered cells (to handle rowSpan/colSpan skipping)
-    const occupiedCells = new Set<string>() // format "Day-StartMins"
+    const occupiedCells = new Set<string>()
 
     const handleDownloadPDF = async () => {
         if (!printRef.current) return
@@ -449,18 +463,36 @@ export default function ExportTimetable() {
 
                                             const { slot, span } = findSlotAndSpan(day, timeStartMins)
 
-                                            // If found, mark spanned cells as occupied
                                             if (slot && span > 1) {
-                                                // We need to mark FUTURE grid slots as occupied
-                                                // Iterate from i+1 to i+span-1
                                                 for (let k = 1; k < span; k++) {
                                                     const nextStart = toMinutes(timeSlots[i + k].start)
                                                     occupiedCells.add(`${day}-${nextStart}`)
                                                 }
                                             }
 
-                                            // Handle Lunch in grid (Transposed: Row=Day, Col=Time)
-                                            if (time.type === 'lunch') return <td key={i} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>LUNCH</td>
+                                            // LUNCH COLUMN (Spanning vertical)
+                                            if (time.type === 'lunch') {
+                                                if (day === workingDays[0]) {
+                                                    return (
+                                                        <td
+                                                            key={i}
+                                                            rowSpan={workingDays.length}
+                                                            style={{
+                                                                border: '1px solid #000',
+                                                                padding: '8px',
+                                                                background: '#fef3c7',
+                                                                textAlign: 'center',
+                                                                fontWeight: 'bold',
+                                                                fontSize: '14px',
+                                                                writingMode: 'vertical-rl'
+                                                            }}
+                                                        >
+                                                            LUNCH BREAK
+                                                        </td>
+                                                    )
+                                                }
+                                                return null
+                                            }
 
                                             return (
                                                 <td key={i} colSpan={span} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', height: '60px' }}>
@@ -481,9 +513,9 @@ export default function ExportTimetable() {
                                             const timeStartMins = toMinutes(time.start)
                                             if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
 
-                                            // Special Case: If it's the lunch row
+                                            // LUNCH ROW (Standard view)
                                             if (time.type === 'lunch') {
-                                                if (day === workingDays[0]) { // First col
+                                                if (day === workingDays[0]) {
                                                     return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold' }}>LUNCH BREAK</td>
                                                 }
                                                 return null
@@ -491,7 +523,6 @@ export default function ExportTimetable() {
 
                                             const { slot, span } = findSlotAndSpan(day, timeStartMins)
 
-                                            // If found, mark spanned cells as occupied (Standard: Row=Time, Col=Day. Spanning means ROW SPAN)
                                             if (slot && span > 1) {
                                                 for (let k = 1; k < span; k++) {
                                                     const nextStart = toMinutes(timeSlots[i + k].start)
@@ -540,17 +571,19 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
     }
 
     if (slot.slot_type === 'free') {
-        return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>- Free -</span>
+        return null // Clean blank
     }
 
     if (slot.is_practical) {
         return (
             <div style={{ fontSize: '12px' }}>
-                <div style={{ fontWeight: 'bold', marginBottom: '2px', color: '#059669' }}>PRACTICAL</div>
+                <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#059669' }}>PRACTICAL</div>
                 {slot.lab_batches?.map((batch, i) => (
-                    <div key={i} style={{ borderTop: i > 0 ? '1px dashed #e5e7eb' : 'none', paddingTop: '2px', marginTop: '2px' }}>
-                        <span style={{ fontWeight: '600' }}>{batch.batch_name}: </span>
-                        {batch.subject?.code} ({batch.classroom?.name || slot.classroom?.name})
+                    <div key={i} style={{ borderTop: i > 0 ? '1px dashed #e5e7eb' : 'none', paddingTop: '4px', marginTop: '4px' }}>
+                        <div style={{ fontWeight: '600' }}>{batch.batch_name}</div>
+                        <div>{batch.subject?.code}</div>
+                        <div>{batch.lecturer?.full_name || batch.lecturer?.short_name}</div>
+                        <div style={{ fontSize: '11px', color: '#4b5563' }}>({batch.classroom?.name || slot.classroom?.name})</div>
                     </div>
                 ))}
             </div>
@@ -560,8 +593,9 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
     return (
         <div>
             <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{slot.subject?.code || slot.subject?.name}</div>
+            <div style={{ fontSize: '12px', marginBottom: '2px' }}>{slot.lecturer?.full_name || slot.lecturer?.short_name}</div>
             <div style={{ fontSize: '11px', color: '#4b5563' }}>
-                {slot.lecturer?.short_name} • {slot.classroom?.name}
+                {slot.classroom?.name}
             </div>
         </div>
     )
