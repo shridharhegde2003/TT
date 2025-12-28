@@ -222,7 +222,7 @@ export default function AuthPage() {
             <div className="absolute top-20 left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl -z-10 pointer-events-none" />
             <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl -z-10 pointer-events-none" />
 
-            <div className="relative z-10 w-full max-w-md px-6">
+            <div className="relative z-50 w-full max-w-md px-6">
                 {/* Logo */}
                 <div className="text-center mb-8">
                     <Link href="/" className="inline-flex items-center space-x-2">
@@ -233,7 +233,7 @@ export default function AuthPage() {
                     </Link>
                 </div>
 
-                <Card className="premium-card border-0 shadow-2xl">
+                <Card className="premium-card border-0 shadow-2xl relative z-50">
                     <CardHeader className="space-y-1 pb-4">
                         <CardTitle className="text-2xl text-center">
                             {view === 'initial' && 'Welcome'}
