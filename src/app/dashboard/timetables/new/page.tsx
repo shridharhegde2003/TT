@@ -47,18 +47,19 @@ export default function NewTimetablePage() {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (user) {
-            const ttName = name.trim() || `${className} - Sem ${semester} - Section ${section}`
+            const ttTitle = name.trim() || `${className} - Sem ${semester} - Section ${section}`
             const { data, error } = await supabase.from('timetables').insert({
                 user_id: user.id,
-                name: ttName,
+                title: ttTitle,
                 class_name: className,
                 semester,
                 section,
-                academic_year: academicYear,
-                status: 'draft'
+                year: academicYear,
+                status: 'in_progress'
             }).select().single()
 
             if (error) {
+                console.error('Create error:', error)
                 toast({ title: 'Error', description: error.message, variant: 'destructive' })
             } else {
                 toast({ title: 'Created', description: 'Timetable created successfully' })
