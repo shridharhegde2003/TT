@@ -157,71 +157,119 @@ export default function ExportTimetable() {
         return `${hour12}:${String(mins).padStart(2, '0')} ${period}`
     }
 
-    // Generate Standard Grid based on Settings
+    // Generate Grid based on Actual Slots + Gaps + Lunch
     const generateTimeSlots = () => {
         if (!settings) return []
 
-        const slotsGrid: { start: string, end: string, type?: string }[] = []
-        let current = toMinutes(settings.college_start_time)
-        const end = toMinutes(settings.college_end_time)
-        const lunchStart = toMinutes(settings.lunch_start_time)
-        const lunchEnd = toMinutes(settings.lunch_end_time)
-        const duration = settings.default_class_duration || 60
-
-        // Loop until end time
-        while (current < end) {
-            // Check if we are at Lunch Start
-            if (current === lunchStart) {
-                // Add Lunch Slot
-                slotsGrid.push({
-                    start: settings.lunch_start_time,
-                    end: settings.lunch_end_time,
-                    type: 'lunch'
-                })
-                current = lunchEnd
-                continue
-            }
-
-            // Normal Slot
-            let next = current + duration
-
-            // If next exceeds lunch start (and current is before lunch), cap it at lunch start?
-            // Usually timetables are designed so slots fit. We'll simply check boundaries.
-            if (current < lunchStart && next > lunchStart) {
-                // If a standard slot would cross into lunch, we adjust?
-                // For simplicity, let's assume valid scheduling.
-                // We'll just start the next slot.
-            }
-
-            // If next exceeds college end, cap at college end
-            if (next > end) next = end
-
-            // Should we add the slot if it has 0 duration?
-            if (next > current) {
-                slotsGrid.push({
-                    start: fromMinutes(current),
-                    end: fromMinutes(next),
-                    type: 'class'
-                })
-            }
-
-            current = next
+        // 1. Start with known fixed slots: Lunch
+        const fixedSlots = []
+        if (settings.lunch_start_time && settings.lunch_end_time) {
+            fixedSlots.push({
+                start: settings.lunch_start_time,
+                end: settings.lunch_end_time,
+                type: 'lunch'
+            })
         }
 
-        // Also merge with unique slots from ACTUAL data to ensure no added slot is missed
-        // if it doesn't align with standard grid
-        const actualTimes = new Set(slots.map(s => `${s.start_time}-${s.end_time}`))
-        actualTimes.forEach(t => {
-            const [s, e] = t.split('-')
-            // Check if this time already exists in grid approx
-            const exists = slotsGrid.some(gridSlot => Math.abs(toMinutes(gridSlot.start) - toMinutes(s)) < 5)
-            if (!exists) {
-                slotsGrid.push({ start: s, end: e, type: 'custom' })
+        // 2. Add Actual Slots
+        // We use a Map to deduplicate by start-end key
+        const uniqueTimes = new Map<string, { start: string, end: string, type?: string }>()
+
+        // Add Fixed
+        fixedSlots.forEach(s => uniqueTimes.set(`${s.start}-${s.end}`, s))
+
+        // Add Actual Data times
+        slots.forEach(s => {
+            const key = `${s.start_time}-${s.end_time}`
+            if (!uniqueTimes.has(key)) {
+                // Check if this overlaps with Lunch?
+                // If it's a "Practical" overlapping lunch, we keep it.
+                // Usually we just add it.
+                uniqueTimes.set(key, { start: s.start_time, end: s.end_time, type: 'class' })
             }
         })
 
-        // Sort by start time
-        return slotsGrid.sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+        // Convert to array and sort
+        let sortedSlots = Array.from(uniqueTimes.values()).sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
+
+        // 3. Fill Gaps
+        // We want to fill gaps "intelligently" to cover College Start -> College End
+        // but WITHOUT creating overlaps with existing slots.
+
+        const filledSlots: typeof sortedSlots = []
+        const collegeStart = toMinutes(settings.college_start_time)
+        const collegeEnd = toMinutes(settings.college_end_time)
+        const duration = settings.default_class_duration || 60
+
+        let currentTime = collegeStart
+
+        // Helper to find next existing slot that starts >= currentTime
+        const getNextSlot = (time: number) => sortedSlots.find(s => toMinutes(s.start) >= time)
+
+        // Iterate through the timeline
+        while (currentTime < collegeEnd) {
+            const nextSlot = getNextSlot(currentTime)
+
+            if (nextSlot) {
+                const nextStart = toMinutes(nextSlot.start)
+
+                // If gap exists between current and next existing slot
+                if (nextStart > currentTime) {
+                    // Try to fit standard slots in the gap
+                    // But if the gap is small (e.g. 5 mins), ignore?
+                    // If gap is large, add empty slots.
+
+                    // While we can fit a full slot before nextStart
+                    while (currentTime + duration <= nextStart) {
+                        filledSlots.push({
+                            start: fromMinutes(currentTime),
+                            end: fromMinutes(currentTime + duration),
+                            type: 'empty'
+                        })
+                        currentTime += duration
+                    }
+
+                    // If there is still a small gap, we force jump to nextStart
+                    // (Or add a partial slot? User said "remaining one cell should show empty")
+                    // We'll jump to avoid overlap.
+                    currentTime = nextStart
+                }
+
+                // Add the existing nextSlot (and any others starting at same time)
+                // Actually we just add this slot (and duplicates handled by next iteration logic? No, we need to skip processed)
+                // But sortedSlots has unique start-ends.
+                // We should add ALL slots that match this start time/range? 
+
+                // Simplified: Just add the nextSlot and advance current
+                filledSlots.push(nextSlot)
+                currentTime = Math.max(currentTime, toMinutes(nextSlot.end))
+
+                // Remove this slot from consideration? No, `getNextSlot` finds >= currentTime.
+                // Since we advanced `currentTime` to `nextSlot.end`, the next call will find the NEXT one.
+
+            } else {
+                // No more existing slots, fill until end
+                while (currentTime + duration <= collegeEnd) {
+                    filledSlots.push({
+                        start: fromMinutes(currentTime),
+                        end: fromMinutes(currentTime + duration),
+                        type: 'empty'
+                    })
+                    currentTime += duration
+                }
+                // Handle remaining partial time at end?
+                if (currentTime < collegeEnd) {
+                    filledSlots.push({
+                        start: fromMinutes(currentTime),
+                        end: fromMinutes(collegeEnd),
+                        type: 'empty'
+                    })
+                    currentTime = collegeEnd
+                }
+            }
+        }
+
+        return filledSlots
     }
 
     const timeSlots = generateTimeSlots()
@@ -532,7 +580,7 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
 
     return (
         <div>
-            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{slot.subject?.name}</div>
+            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{slot.subject?.code || slot.subject?.name}</div>
             <div style={{ fontSize: '11px', color: '#4b5563' }}>
                 {slot.lecturer?.short_name} • {slot.classroom?.name}
             </div>
