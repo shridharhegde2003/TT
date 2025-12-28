@@ -183,6 +183,11 @@ export default function TimetableEditorPage() {
 
             // Fetch lab batches for practical slots
             const practicalSlots = (slotsData || []).filter(s => s.is_practical)
+
+            // Debug log
+            console.log('Slots data from DB:', slotsData)
+            console.log('Working days:', settingsData?.working_days)
+
             if (practicalSlots.length > 0) {
                 const { data: batchesData } = await supabase
                     .from('lab_batches')
