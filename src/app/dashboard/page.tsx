@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { Users, Building, BookOpen, Calendar, Plus, ArrowRight } from 'lucide-react'
 
 export default function DashboardPage() {
     const [stats, setStats] = useState({ lecturers: 0, classrooms: 0, subjects: 0, timetables: 0 })
@@ -33,17 +34,17 @@ export default function DashboardPage() {
     }, [])
 
     const statCards = [
-        { label: 'Lecturers', value: stats.lecturers, icon: '👨‍🏫', color: '#3b82f6', href: '/dashboard/lecturers' },
-        { label: 'Classrooms', value: stats.classrooms, icon: '🏫', color: '#10b981', href: '/dashboard/classrooms' },
-        { label: 'Subjects', value: stats.subjects, icon: '📚', color: '#f59e0b', href: '/dashboard/subjects' },
-        { label: 'Timetables', value: stats.timetables, icon: '📅', color: '#8b5cf6', href: '/dashboard/timetables' },
+        { label: 'Lecturers', value: stats.lecturers, icon: Users, color: '#3b82f6', href: '/dashboard/lecturers' },
+        { label: 'Classrooms', value: stats.classrooms, icon: Building, color: '#10b981', href: '/dashboard/classrooms' },
+        { label: 'Subjects', value: stats.subjects, icon: BookOpen, color: '#f59e0b', href: '/dashboard/subjects' },
+        { label: 'Timetables', value: stats.timetables, icon: Calendar, color: '#8b5cf6', href: '/dashboard/timetables' },
     ]
 
     const quickActions = [
-        { label: 'Add Lecturer', href: '/dashboard/lecturers', icon: '➕' },
-        { label: 'Add Classroom', href: '/dashboard/classrooms', icon: '🏫' },
-        { label: 'Add Subject', href: '/dashboard/subjects', icon: '📖' },
-        { label: 'Create Timetable', href: '/dashboard/timetables/new', icon: '📅' },
+        { label: 'Add Lecturer', href: '/dashboard/lecturers', icon: Users },
+        { label: 'Add Classroom', href: '/dashboard/classrooms', icon: Building },
+        { label: 'Add Subject', href: '/dashboard/subjects', icon: BookOpen },
+        { label: 'Create Timetable', href: '/dashboard/timetables/new', icon: Calendar },
     ]
 
     return (
@@ -60,24 +61,37 @@ export default function DashboardPage() {
 
             {/* Stats Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-                {statCards.map(card => (
-                    <Link key={card.label} href={card.href} style={{ textDecoration: 'none' }}>
-                        <div style={{
-                            background: 'white',
-                            borderRadius: '12px',
-                            padding: '24px',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                            borderLeft: `4px solid ${card.color}`,
-                            cursor: 'pointer'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                <span style={{ fontSize: '32px' }}>{card.icon}</span>
-                                <span style={{ fontSize: '36px', fontWeight: 'bold', color: card.color }}>{card.value}</span>
+                {statCards.map(card => {
+                    const Icon = card.icon
+                    return (
+                        <Link key={card.label} href={card.href} style={{ textDecoration: 'none' }}>
+                            <div style={{
+                                background: 'white',
+                                borderRadius: '12px',
+                                padding: '24px',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                borderLeft: `4px solid ${card.color}`,
+                                cursor: 'pointer'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                    <div style={{
+                                        width: '48px',
+                                        height: '48px',
+                                        borderRadius: '12px',
+                                        background: `${card.color}15`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}>
+                                        <Icon size={24} color={card.color} />
+                                    </div>
+                                    <span style={{ fontSize: '36px', fontWeight: 'bold', color: card.color }}>{card.value}</span>
+                                </div>
+                                <p style={{ color: '#6b7280', fontWeight: '500' }}>{card.label}</p>
                             </div>
-                            <p style={{ color: '#6b7280', fontWeight: '500' }}>{card.label}</p>
-                        </div>
-                    </Link>
-                ))}
+                        </Link>
+                    )
+                })}
             </div>
 
             {/* Quick Actions */}
@@ -86,22 +100,36 @@ export default function DashboardPage() {
                     Quick Actions
                 </h2>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-                    {quickActions.map(action => (
-                        <Link key={action.label} href={action.href} style={{ textDecoration: 'none' }}>
-                            <div style={{
-                                background: 'white',
-                                borderRadius: '12px',
-                                padding: '20px',
-                                textAlign: 'center',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                cursor: 'pointer',
-                                border: '2px solid transparent'
-                            }}>
-                                <span style={{ fontSize: '28px', display: 'block', marginBottom: '8px' }}>{action.icon}</span>
-                                <span style={{ color: '#374151', fontWeight: '500' }}>{action.label}</span>
-                            </div>
-                        </Link>
-                    ))}
+                    {quickActions.map(action => {
+                        const Icon = action.icon
+                        return (
+                            <Link key={action.label} href={action.href} style={{ textDecoration: 'none' }}>
+                                <div style={{
+                                    background: 'white',
+                                    borderRadius: '12px',
+                                    padding: '20px',
+                                    textAlign: 'center',
+                                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                    cursor: 'pointer',
+                                    border: '2px solid transparent'
+                                }}>
+                                    <div style={{
+                                        width: '48px',
+                                        height: '48px',
+                                        borderRadius: '12px',
+                                        background: '#eef2ff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        margin: '0 auto 12px'
+                                    }}>
+                                        <Icon size={24} color="#4f46e5" />
+                                    </div>
+                                    <span style={{ color: '#374151', fontWeight: '500' }}>{action.label}</span>
+                                </div>
+                            </Link>
+                        )
+                    })}
                 </div>
             </div>
 
@@ -116,22 +144,37 @@ export default function DashboardPage() {
                     Getting Started
                 </h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '20px' }}>1️⃣</span>
-                        <span style={{ color: '#374151' }}>Add your lecturers with their short names</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '20px' }}>2️⃣</span>
-                        <span style={{ color: '#374151' }}>Add classrooms and labs</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '20px' }}>3️⃣</span>
-                        <span style={{ color: '#374151' }}>Add subjects with colors</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '20px' }}>4️⃣</span>
-                        <span style={{ color: '#374151' }}>Create timetables and export as PDF</span>
-                    </div>
+                    {[
+                        { step: 1, text: 'Add your lecturers with their short names' },
+                        { step: 2, text: 'Add classrooms and labs' },
+                        { step: 3, text: 'Add subjects with colors' },
+                        { step: 4, text: 'Create timetables and export as PDF' }
+                    ].map(item => (
+                        <div key={item.step} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '12px',
+                            background: '#f9fafb',
+                            borderRadius: '8px'
+                        }}>
+                            <div style={{
+                                width: '28px',
+                                height: '28px',
+                                borderRadius: '50%',
+                                background: '#4f46e5',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '14px',
+                                fontWeight: '600'
+                            }}>
+                                {item.step}
+                            </div>
+                            <span style={{ color: '#374151' }}>{item.text}</span>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>

@@ -4,14 +4,15 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
+import { Home, Users, Building, BookOpen, Calendar, Settings, LogOut, Menu, User } from 'lucide-react'
 
 const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-    { href: '/dashboard/lecturers', label: 'Lecturers', icon: '👨‍🏫' },
-    { href: '/dashboard/classrooms', label: 'Classrooms', icon: '🏫' },
-    { href: '/dashboard/subjects', label: 'Subjects', icon: '📚' },
-    { href: '/dashboard/timetables', label: 'Timetables', icon: '📅' },
-    { href: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
+    { href: '/dashboard', label: 'Dashboard', icon: Home },
+    { href: '/dashboard/lecturers', label: 'Lecturers', icon: Users },
+    { href: '/dashboard/classrooms', label: 'Classrooms', icon: Building },
+    { href: '/dashboard/subjects', label: 'Subjects', icon: BookOpen },
+    { href: '/dashboard/timetables', label: 'Timetables', icon: Calendar },
+    { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -53,34 +54,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {/* Logo */}
                 <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb' }}>
                     <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '24px' }}>📅</span>
+                        <Calendar size={24} color="#4f46e5" />
                         <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>TimeTable Pro</span>
                     </Link>
                 </div>
 
                 {/* Nav Items */}
                 <nav style={{ flex: 1, padding: '16px 12px' }}>
-                    {navItems.map(item => (
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '12px 16px',
-                                marginBottom: '4px',
-                                borderRadius: '8px',
-                                textDecoration: 'none',
-                                color: pathname === item.href ? '#4f46e5' : '#374151',
-                                background: pathname === item.href ? '#eef2ff' : 'transparent',
-                                fontWeight: pathname === item.href ? '600' : '500'
-                            }}
-                        >
-                            <span style={{ fontSize: '18px' }}>{item.icon}</span>
-                            <span>{item.label}</span>
-                        </Link>
-                    ))}
+                    {navItems.map(item => {
+                        const Icon = item.icon
+                        const isActive = pathname === item.href
+                        return (
+                            <Link
+                                key={item.href}
+                                href={item.href}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    padding: '12px 16px',
+                                    marginBottom: '4px',
+                                    borderRadius: '8px',
+                                    textDecoration: 'none',
+                                    color: isActive ? '#4f46e5' : '#374151',
+                                    background: isActive ? '#eef2ff' : 'transparent',
+                                    fontWeight: isActive ? '600' : '500'
+                                }}
+                            >
+                                <Icon size={20} />
+                                <span>{item.label}</span>
+                            </Link>
+                        )
+                    })}
                 </nav>
 
                 {/* Logout */}
@@ -95,10 +100,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             border: 'none',
                             borderRadius: '8px',
                             fontWeight: '500',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
                         }}
                     >
-                        🚪 Logout
+                        <LogOut size={18} />
+                        Logout
                     </button>
                 </div>
             </aside>
@@ -122,10 +132,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             border: 'none',
                             borderRadius: '6px',
                             cursor: 'pointer',
-                            fontSize: '18px'
+                            display: 'flex',
+                            alignItems: 'center'
                         }}
                     >
-                        ☰
+                        <Menu size={20} />
                     </button>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <span style={{ color: '#6b7280', fontSize: '14px' }}>{user?.email}</span>
@@ -137,10 +148,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'white',
-                            fontWeight: 'bold'
+                            color: 'white'
                         }}>
-                            {user?.email?.[0]?.toUpperCase() || 'U'}
+                            <User size={20} />
                         </div>
                     </div>
                 </header>

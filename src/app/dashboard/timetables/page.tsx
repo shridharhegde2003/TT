@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Edit, Trash2, FileDown, Calendar, Check, FileEdit } from 'lucide-react'
 
 interface Timetable {
     id: string
@@ -62,10 +63,14 @@ export default function TimetablesPage() {
                             border: 'none',
                             borderRadius: '8px',
                             fontWeight: '600',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
                         }}
                     >
-                        + Create Timetable
+                        <Plus size={20} />
+                        Create Timetable
                     </button>
                 </Link>
             </div>
@@ -82,7 +87,7 @@ export default function TimetablesPage() {
                     color: '#6b7280',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                 }}>
-                    <p style={{ fontSize: '48px', marginBottom: '16px' }}>📅</p>
+                    <Calendar size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
                     <p style={{ marginBottom: '16px' }}>No timetables created yet.</p>
                     <Link href="/dashboard/timetables/new" style={{ textDecoration: 'none' }}>
                         <button
@@ -93,9 +98,13 @@ export default function TimetablesPage() {
                                 border: 'none',
                                 borderRadius: '8px',
                                 fontWeight: '600',
-                                cursor: 'pointer'
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px'
                             }}
                         >
+                            <Plus size={18} />
                             Create Your First Timetable
                         </button>
                     </Link>
@@ -147,6 +156,9 @@ export default function TimetablesPage() {
                                     </div>
                                 </div>
                                 <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
                                     padding: '4px 10px',
                                     background: tt.status === 'published' ? '#d1fae5' : '#fef3c7',
                                     color: tt.status === 'published' ? '#059669' : '#d97706',
@@ -154,7 +166,8 @@ export default function TimetablesPage() {
                                     fontSize: '12px',
                                     fontWeight: '600'
                                 }}>
-                                    {tt.status === 'published' ? '✓ Published' : '📝 Draft'}
+                                    {tt.status === 'published' ? <Check size={12} /> : <FileEdit size={12} />}
+                                    {tt.status === 'published' ? 'Published' : 'Draft'}
                                 </span>
                             </div>
                             <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '16px' }}>
@@ -170,9 +183,14 @@ export default function TimetablesPage() {
                                         border: 'none',
                                         borderRadius: '8px',
                                         fontWeight: '500',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px'
                                     }}>
-                                        ✏️ Edit
+                                        <Edit size={16} />
+                                        Edit
                                     </button>
                                 </Link>
                                 <Link href={`/dashboard/timetables/${tt.id}/export`} style={{ flex: 1, textDecoration: 'none' }}>
@@ -184,9 +202,14 @@ export default function TimetablesPage() {
                                         border: 'none',
                                         borderRadius: '8px',
                                         fontWeight: '500',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '6px'
                                     }}>
-                                        📄 Export
+                                        <FileDown size={16} />
+                                        Export
                                     </button>
                                 </Link>
                                 <button
@@ -197,10 +220,12 @@ export default function TimetablesPage() {
                                         color: '#dc2626',
                                         border: 'none',
                                         borderRadius: '8px',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center'
                                     }}
                                 >
-                                    🗑️
+                                    <Trash2 size={16} />
                                 </button>
                             </div>
                         </div>

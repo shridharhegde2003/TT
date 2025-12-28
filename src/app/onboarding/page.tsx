@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Calendar, ArrowRight, ArrowLeft, Check, Building, Clock } from 'lucide-react'
 
 export default function OnboardingPage() {
     const [step, setStep] = useState(1)
@@ -105,7 +106,10 @@ export default function OnboardingPage() {
         background: '#4f46e5',
         border: 'none',
         borderRadius: '8px',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        display: 'inline-flex' as const,
+        alignItems: 'center' as const,
+        gap: '8px'
     }
 
     const buttonSecondary = {
@@ -116,7 +120,10 @@ export default function OnboardingPage() {
         background: '#f3f4f6',
         border: 'none',
         borderRadius: '8px',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        display: 'inline-flex' as const,
+        alignItems: 'center' as const,
+        gap: '8px'
     }
 
     return (
@@ -131,6 +138,18 @@ export default function OnboardingPage() {
             }}>
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+                    <div style={{
+                        width: '60px',
+                        height: '60px',
+                        background: '#4f46e5',
+                        borderRadius: '12px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '16px'
+                    }}>
+                        <Calendar size={32} color="white" />
+                    </div>
                     <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
                         Welcome to TimeTable Pro
                     </h1>
@@ -164,7 +183,8 @@ export default function OnboardingPage() {
                     {/* Step 1: College Name */}
                     {step === 1 && (
                         <div>
-                            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px' }}>
+                            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Building size={24} />
                                 Step 1: College Information
                             </h2>
                             <p style={{ color: '#6b7280', marginBottom: '24px' }}>
@@ -187,7 +207,8 @@ export default function OnboardingPage() {
                                     onClick={() => collegeName.trim() ? setStep(2) : toast({ title: 'Required', description: 'Enter college name', variant: 'destructive' })}
                                     style={buttonPrimary}
                                 >
-                                    Next →
+                                    Next
+                                    <ArrowRight size={18} />
                                 </button>
                             </div>
                         </div>
@@ -196,7 +217,8 @@ export default function OnboardingPage() {
                     {/* Step 2: Timings */}
                     {step === 2 && (
                         <div>
-                            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px' }}>
+                            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Clock size={24} />
                                 Step 2: College Timings
                             </h2>
                             <p style={{ color: '#6b7280', marginBottom: '24px' }}>
@@ -259,10 +281,12 @@ export default function OnboardingPage() {
 
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <button onClick={() => setStep(1)} style={buttonSecondary}>
-                                    ← Back
+                                    <ArrowLeft size={18} />
+                                    Back
                                 </button>
                                 <button onClick={() => setStep(3)} style={buttonPrimary}>
-                                    Next →
+                                    Next
+                                    <ArrowRight size={18} />
                                 </button>
                             </div>
                         </div>
@@ -271,7 +295,8 @@ export default function OnboardingPage() {
                     {/* Step 3: Working Days */}
                     {step === 3 && (
                         <div>
-                            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px' }}>
+                            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Calendar size={24} />
                                 Step 3: Working Days
                             </h2>
                             <p style={{ color: '#6b7280', marginBottom: '24px' }}>
@@ -303,7 +328,8 @@ export default function OnboardingPage() {
 
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <button onClick={() => setStep(2)} style={buttonSecondary}>
-                                    ← Back
+                                    <ArrowLeft size={18} />
+                                    Back
                                 </button>
                                 <button
                                     onClick={handleComplete}
@@ -314,7 +340,8 @@ export default function OnboardingPage() {
                                         cursor: loading ? 'not-allowed' : 'pointer'
                                     }}
                                 >
-                                    {loading ? 'Saving...' : '✓ Complete Setup'}
+                                    {loading ? 'Saving...' : 'Complete Setup'}
+                                    <Check size={18} />
                                 </button>
                             </div>
                         </div>

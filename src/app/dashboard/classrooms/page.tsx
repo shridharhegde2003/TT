@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Edit, Trash2, X, Save, Building, FlaskConical } from 'lucide-react'
 
 interface Classroom {
     id: string
@@ -130,10 +131,14 @@ export default function ClassroomsPage() {
                         border: 'none',
                         borderRadius: '8px',
                         fontWeight: '600',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                     }}
                 >
-                    + Add Room
+                    <Plus size={20} />
+                    Add Room
                 </button>
             </div>
 
@@ -194,9 +199,13 @@ export default function ClassroomsPage() {
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontWeight: '600',
-                                    cursor: loading ? 'not-allowed' : 'pointer'
+                                    cursor: loading ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}
                             >
+                                <Save size={18} />
                                 {loading ? 'Saving...' : editingId ? 'Update' : 'Add Room'}
                             </button>
                             <button
@@ -209,9 +218,13 @@ export default function ClassroomsPage() {
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontWeight: '500',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}
                             >
+                                <X size={18} />
                                 Cancel
                             </button>
                         </div>
@@ -230,7 +243,7 @@ export default function ClassroomsPage() {
                         textAlign: 'center',
                         color: '#6b7280'
                     }}>
-                        <p style={{ fontSize: '48px', marginBottom: '16px' }}>🏫</p>
+                        <Building size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
                         <p>No rooms added yet. Click "Add Room" to get started.</p>
                     </div>
                 ) : (
@@ -248,7 +261,9 @@ export default function ClassroomsPage() {
                                         {classroom.name}
                                     </h3>
                                     <span style={{
-                                        display: 'inline-block',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
                                         padding: '2px 8px',
                                         background: classroom.type === 'lab' ? '#d1fae5' : '#dbeafe',
                                         color: classroom.type === 'lab' ? '#059669' : '#2563eb',
@@ -256,10 +271,14 @@ export default function ClassroomsPage() {
                                         fontSize: '12px',
                                         fontWeight: '600'
                                     }}>
-                                        {classroom.type === 'lab' ? '🔬 Lab' : '📚 Classroom'}
+                                        {classroom.type === 'lab' ? <FlaskConical size={12} /> : <Building size={12} />}
+                                        {classroom.type === 'lab' ? 'Lab' : 'Classroom'}
                                     </span>
                                 </div>
-                                <span style={{ fontSize: '24px' }}>{classroom.type === 'lab' ? '🔬' : '🏫'}</span>
+                                {classroom.type === 'lab' ?
+                                    <FlaskConical size={24} color="#10b981" /> :
+                                    <Building size={24} color="#3b82f6" />
+                                }
                             </div>
                             {classroom.capacity && (
                                 <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>
@@ -276,10 +295,15 @@ export default function ClassroomsPage() {
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: 'pointer',
-                                        fontSize: '13px'
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px'
                                     }}
                                 >
-                                    ✏️ Edit
+                                    <Edit size={14} />
+                                    Edit
                                 </button>
                                 <button
                                     onClick={() => handleDelete(classroom.id)}
@@ -291,10 +315,15 @@ export default function ClassroomsPage() {
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: 'pointer',
-                                        fontSize: '13px'
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px'
                                     }}
                                 >
-                                    🗑️ Delete
+                                    <Trash2 size={14} />
+                                    Delete
                                 </button>
                             </div>
                         </div>

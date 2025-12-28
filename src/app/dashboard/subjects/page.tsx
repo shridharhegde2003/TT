@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Edit, Trash2, X, Save, BookOpen, FlaskConical } from 'lucide-react'
 
 interface Subject {
     id: string
@@ -130,10 +131,14 @@ export default function SubjectsPage() {
                         border: 'none',
                         borderRadius: '8px',
                         fontWeight: '600',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                     }}
                 >
-                    + Add Subject
+                    <Plus size={20} />
+                    Add Subject
                 </button>
             </div>
 
@@ -187,10 +192,15 @@ export default function SubjectsPage() {
                                         background: type === 'theory' ? '#eef2ff' : 'white',
                                         color: type === 'theory' ? '#4f46e5' : '#374151',
                                         fontWeight: '500',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
                                     }}
                                 >
-                                    📚 Theory
+                                    <BookOpen size={18} />
+                                    Theory
                                 </button>
                                 <button
                                     type="button"
@@ -204,10 +214,15 @@ export default function SubjectsPage() {
                                         background: type === 'practical' ? '#d1fae5' : 'white',
                                         color: type === 'practical' ? '#059669' : '#374151',
                                         fontWeight: '500',
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px'
                                     }}
                                 >
-                                    🔬 Practical
+                                    <FlaskConical size={18} />
+                                    Practical
                                 </button>
                             </div>
                         </div>
@@ -242,9 +257,13 @@ export default function SubjectsPage() {
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontWeight: '600',
-                                    cursor: loading ? 'not-allowed' : 'pointer'
+                                    cursor: loading ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}
                             >
+                                <Save size={18} />
                                 {loading ? 'Saving...' : editingId ? 'Update' : 'Add Subject'}
                             </button>
                             <button
@@ -257,9 +276,13 @@ export default function SubjectsPage() {
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontWeight: '500',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}
                             >
+                                <X size={18} />
                                 Cancel
                             </button>
                         </div>
@@ -278,7 +301,7 @@ export default function SubjectsPage() {
                         textAlign: 'center',
                         color: '#6b7280'
                     }}>
-                        <p style={{ fontSize: '48px', marginBottom: '16px' }}>📚</p>
+                        <BookOpen size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
                         <p>No subjects added yet. Click "Add Subject" to get started.</p>
                     </div>
                 ) : (
@@ -307,6 +330,9 @@ export default function SubjectsPage() {
                                             {subject.code}
                                         </span>
                                         <span style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
                                             padding: '2px 8px',
                                             background: subject.type === 'practical' ? '#d1fae5' : '#dbeafe',
                                             color: subject.type === 'practical' ? '#059669' : '#2563eb',
@@ -314,7 +340,8 @@ export default function SubjectsPage() {
                                             fontSize: '12px',
                                             fontWeight: '500'
                                         }}>
-                                            {subject.type === 'practical' ? '🔬 Practical' : '📚 Theory'}
+                                            {subject.type === 'practical' ? <FlaskConical size={12} /> : <BookOpen size={12} />}
+                                            {subject.type === 'practical' ? 'Practical' : 'Theory'}
                                         </span>
                                     </div>
                                 </div>
@@ -335,10 +362,15 @@ export default function SubjectsPage() {
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: 'pointer',
-                                        fontSize: '13px'
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px'
                                     }}
                                 >
-                                    ✏️ Edit
+                                    <Edit size={14} />
+                                    Edit
                                 </button>
                                 <button
                                     onClick={() => handleDelete(subject.id)}
@@ -350,10 +382,15 @@ export default function SubjectsPage() {
                                         border: 'none',
                                         borderRadius: '6px',
                                         cursor: 'pointer',
-                                        fontSize: '13px'
+                                        fontSize: '13px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px'
                                     }}
                                 >
-                                    🗑️ Delete
+                                    <Trash2 size={14} />
+                                    Delete
                                 </button>
                             </div>
                         </div>

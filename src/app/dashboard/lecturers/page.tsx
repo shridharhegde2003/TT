@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Plus, Edit, Trash2, X, Save, Users } from 'lucide-react'
 
 interface Lecturer {
     id: string
@@ -144,10 +145,14 @@ export default function LecturersPage() {
                         border: 'none',
                         borderRadius: '8px',
                         fontWeight: '600',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                     }}
                 >
-                    + Add Lecturer
+                    <Plus size={20} />
+                    Add Lecturer
                 </button>
             </div>
 
@@ -223,9 +228,13 @@ export default function LecturersPage() {
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontWeight: '600',
-                                    cursor: loading ? 'not-allowed' : 'pointer'
+                                    cursor: loading ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}
                             >
+                                <Save size={18} />
                                 {loading ? 'Saving...' : editingId ? 'Update' : 'Add Lecturer'}
                             </button>
                             <button
@@ -238,9 +247,13 @@ export default function LecturersPage() {
                                     border: 'none',
                                     borderRadius: '8px',
                                     fontWeight: '500',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
                                 }}
                             >
+                                <X size={18} />
                                 Cancel
                             </button>
                         </div>
@@ -257,7 +270,7 @@ export default function LecturersPage() {
             }}>
                 {lecturers.length === 0 ? (
                     <div style={{ padding: '48px', textAlign: 'center', color: '#6b7280' }}>
-                        <p style={{ fontSize: '48px', marginBottom: '16px' }}>👨‍🏫</p>
+                        <Users size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
                         <p>No lecturers added yet. Click "Add Lecturer" to get started.</p>
                     </div>
                 ) : (
@@ -300,10 +313,14 @@ export default function LecturersPage() {
                                                 border: 'none',
                                                 borderRadius: '6px',
                                                 cursor: 'pointer',
-                                                marginRight: '8px'
+                                                marginRight: '8px',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
                                             }}
                                         >
-                                            ✏️ Edit
+                                            <Edit size={14} />
+                                            Edit
                                         </button>
                                         <button
                                             onClick={() => handleDelete(lecturer.id)}
@@ -313,10 +330,14 @@ export default function LecturersPage() {
                                                 color: '#dc2626',
                                                 border: 'none',
                                                 borderRadius: '6px',
-                                                cursor: 'pointer'
+                                                cursor: 'pointer',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
                                             }}
                                         >
-                                            🗑️ Delete
+                                            <Trash2 size={14} />
+                                            Delete
                                         </button>
                                     </td>
                                 </tr>

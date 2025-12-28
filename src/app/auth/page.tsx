@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Calendar, Eye, EyeOff, ArrowLeft, LogIn, UserPlus } from 'lucide-react'
 
 export default function AuthPage() {
     const [mode, setMode] = useState<'choose' | 'login' | 'signup'>('choose')
@@ -126,7 +127,7 @@ export default function AuthPage() {
                         justifyContent: 'center',
                         marginBottom: '10px'
                     }}>
-                        <span style={{ fontSize: '28px' }}>📅</span>
+                        <Calendar size={32} color="white" />
                     </div>
                     <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a1a2e', margin: 0 }}>
                         TimeTable Pro
@@ -155,9 +156,14 @@ export default function AuthPage() {
                                 border: 'none',
                                 borderRadius: '10px',
                                 cursor: 'pointer',
-                                marginBottom: '12px'
+                                marginBottom: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
                             }}
                         >
+                            <LogIn size={20} />
                             Sign In
                         </button>
 
@@ -172,9 +178,14 @@ export default function AuthPage() {
                                 background: 'white',
                                 border: '2px solid #e0e0e0',
                                 borderRadius: '10px',
-                                cursor: 'pointer'
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
                             }}
                         >
+                            <UserPlus size={20} />
                             Create New Account
                         </button>
                     </div>
@@ -242,11 +253,12 @@ export default function AuthPage() {
                                         background: 'none',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        fontSize: '14px',
-                                        color: '#666'
+                                        color: '#666',
+                                        display: 'flex',
+                                        alignItems: 'center'
                                     }}
                                 >
-                                    {showPassword ? '🙈' : '👁️'}
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                 </button>
                             </div>
                         </div>
@@ -264,9 +276,14 @@ export default function AuthPage() {
                                 border: 'none',
                                 borderRadius: '10px',
                                 cursor: loading ? 'not-allowed' : 'pointer',
-                                marginBottom: '16px'
+                                marginBottom: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
                             }}
                         >
+                            <LogIn size={18} />
                             {loading ? 'Signing in...' : 'Sign In'}
                         </button>
 
@@ -282,10 +299,15 @@ export default function AuthPage() {
                                     background: '#f5f5f5',
                                     border: 'none',
                                     borderRadius: '8px',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
                                 }}
                             >
-                                ← Back
+                                <ArrowLeft size={16} />
+                                Back
                             </button>
                             <button
                                 type="button"
@@ -392,11 +414,12 @@ export default function AuthPage() {
                                         background: 'none',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        fontSize: '14px',
-                                        color: '#666'
+                                        color: '#666',
+                                        display: 'flex',
+                                        alignItems: 'center'
                                     }}
                                 >
-                                    {showPassword ? '🙈' : '👁️'}
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                 </button>
                             </div>
                         </div>
@@ -414,9 +437,14 @@ export default function AuthPage() {
                                 border: 'none',
                                 borderRadius: '10px',
                                 cursor: loading ? 'not-allowed' : 'pointer',
-                                marginBottom: '16px'
+                                marginBottom: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
                             }}
                         >
+                            <UserPlus size={18} />
                             {loading ? 'Creating...' : 'Create Account'}
                         </button>
 
@@ -432,10 +460,15 @@ export default function AuthPage() {
                                     background: '#f5f5f5',
                                     border: 'none',
                                     borderRadius: '8px',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
                                 }}
                             >
-                                ← Back
+                                <ArrowLeft size={16} />
+                                Back
                             </button>
                             <button
                                 type="button"
@@ -459,8 +492,9 @@ export default function AuthPage() {
 
                 {/* Back to Home */}
                 <div style={{ textAlign: 'center', marginTop: '25px' }}>
-                    <Link href="/" style={{ color: '#667eea', textDecoration: 'none', fontSize: '14px' }}>
-                        ← Back to Home
+                    <Link href="/" style={{ color: '#667eea', textDecoration: 'none', fontSize: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <ArrowLeft size={16} />
+                        Back to Home
                     </Link>
                 </div>
             </div>

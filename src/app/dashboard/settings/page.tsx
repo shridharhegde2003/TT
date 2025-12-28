@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { Save, Building, Clock, Calendar } from 'lucide-react'
 
 interface CollegeSettings {
     college_name: string
@@ -128,8 +129,9 @@ export default function SettingsPage() {
                 marginBottom: '24px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
             }}>
-                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-                    📚 College Information
+                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Building size={20} />
+                    College Information
                 </h2>
                 <div>
                     <label style={labelStyle}>College Name *</label>
@@ -151,8 +153,9 @@ export default function SettingsPage() {
                 marginBottom: '24px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
             }}>
-                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-                    ⏰ College Timings
+                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Clock size={20} />
+                    College Timings
                 </h2>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                     <div>
@@ -215,8 +218,9 @@ export default function SettingsPage() {
                 marginBottom: '24px',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
             }}>
-                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-                    📅 Working Days
+                <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Calendar size={20} />
+                    Working Days
                 </h2>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
                     {allDays.map(day => (
@@ -255,10 +259,15 @@ export default function SettingsPage() {
                     borderRadius: '8px',
                     fontWeight: '600',
                     fontSize: '16px',
-                    cursor: saving ? 'not-allowed' : 'pointer'
+                    cursor: saving ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
                 }}
             >
-                {saving ? 'Saving...' : '💾 Save Settings'}
+                <Save size={20} />
+                {saving ? 'Saving...' : 'Save Settings'}
             </button>
         </div>
     )
