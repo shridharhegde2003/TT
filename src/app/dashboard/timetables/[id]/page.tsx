@@ -341,9 +341,17 @@ export default function TimetableEditorPage() {
             return
         }
 
-        if (slotType === 'class' && !isPractical && (!selectedSubject || !selectedLecturer)) {
-            toast({ title: 'Error', description: 'Please select subject and lecturer', variant: 'destructive' })
-            return
+        if (slotType === 'class' && !isPractical) {
+            const selectedSubjectObj = subjects.find(s => s.id === selectedSubject)
+            // Only require lecturer if the subject requires one
+            if (!selectedSubject) {
+                toast({ title: 'Error', description: 'Please select a subject', variant: 'destructive' })
+                return
+            }
+            if (!selectedSubjectObj?.no_lecturer_required && !selectedLecturer) {
+                toast({ title: 'Error', description: 'Please select a lecturer', variant: 'destructive' })
+                return
+            }
         }
 
         if (isPractical && labBatches.length === 0) {
