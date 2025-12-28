@@ -83,7 +83,7 @@ export default function ExportTimetable() {
                 .single()
             setSettings(settingsData)
 
-            // Fetch all related data in parallel
+            // Fetch all related data
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) return
 
@@ -145,7 +145,6 @@ export default function ExportTimetable() {
     const fromMinutes = (mins: number) => {
         const h = Math.floor(mins / 60)
         const m = mins % 60
-        // Use 24h format for logic, formatTime12 for display
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
     }
 
@@ -157,125 +156,85 @@ export default function ExportTimetable() {
         return `${hour12}:${String(mins).padStart(2, '0')} ${period}`
     }
 
-    // Generate Grid based on Actual Slots + Gaps + Lunch
-    const generateTimeSlots = () => {
+    // Generate Standard Grid based ONLY on Settings (Standard Periods)
+    const generateStandardGrid = () => {
         if (!settings) return []
 
-        // 1. Start with known fixed slots: Lunch
-        const fixedSlots = []
-        if (settings.lunch_start_time && settings.lunch_end_time) {
-            fixedSlots.push({
-                start: settings.lunch_start_time,
-                end: settings.lunch_end_time,
-                type: 'lunch'
-            })
-        }
-
-        // 2. Add Actual Slots
-        // We use a Map to deduplicate by start-end key
-        const uniqueTimes = new Map<string, { start: string, end: string, type?: string }>()
-
-        // Add Fixed
-        fixedSlots.forEach(s => uniqueTimes.set(`${s.start}-${s.end}`, s))
-
-        // Add Actual Data times
-        slots.forEach(s => {
-            const key = `${s.start_time}-${s.end_time}`
-            if (!uniqueTimes.has(key)) {
-                // Check if this overlaps with Lunch?
-                // If it's a "Practical" overlapping lunch, we keep it.
-                // Usually we just add it.
-                uniqueTimes.set(key, { start: s.start_time, end: s.end_time, type: 'class' })
-            }
-        })
-
-        // Convert to array and sort
-        let sortedSlots = Array.from(uniqueTimes.values()).sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
-
-        // 3. Fill Gaps
-        // We want to fill gaps "intelligently" to cover College Start -> College End
-        // but WITHOUT creating overlaps with existing slots.
-
-        const filledSlots: typeof sortedSlots = []
-        const collegeStart = toMinutes(settings.college_start_time)
-        const collegeEnd = toMinutes(settings.college_end_time)
+        const grid: { start: string, end: string, type: 'class' | 'lunch' }[] = []
+        let current = toMinutes(settings.college_start_time)
+        const end = toMinutes(settings.college_end_time)
+        const lunchStart = toMinutes(settings.lunch_start_time)
+        const lunchEnd = toMinutes(settings.lunch_end_time)
         const duration = settings.default_class_duration || 60
 
-        let currentTime = collegeStart
+        while (current < end) {
+            // Is it Lunch?
+            if (current === lunchStart) {
+                grid.push({
+                    start: settings.lunch_start_time,
+                    end: settings.lunch_end_time,
+                    type: 'lunch'
+                })
+                current = lunchEnd
+                continue
+            }
 
-        // Helper to find next existing slot that starts >= currentTime
-        const getNextSlot = (time: number) => sortedSlots.find(s => toMinutes(s.start) >= time)
+            // Normal Slot
+            let next = current + duration
+            // Cap at lunch
+            if (current < lunchStart && next > lunchStart) {
+                next = lunchStart
+            }
+            // Cap at end
+            if (next > end) next = end
 
-        // Iterate through the timeline
-        while (currentTime < collegeEnd) {
-            const nextSlot = getNextSlot(currentTime)
+            if (next > current) {
+                grid.push({
+                    start: fromMinutes(current),
+                    end: fromMinutes(next),
+                    type: 'class'
+                })
+            }
+            current = next
+        }
+        return grid
+    }
 
-            if (nextSlot) {
-                const nextStart = toMinutes(nextSlot.start)
+    const timeSlots = generateStandardGrid()
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const workingDays = (settings?.working_days || []).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b))
 
-                // If gap exists between current and next existing slot
-                if (nextStart > currentTime) {
-                    // Try to fit standard slots in the gap
-                    // But if the gap is small (e.g. 5 mins), ignore?
-                    // If gap is large, add empty slots.
+    // Helper: Find slot and calculate Span (how many Grid Rows/Cols it covers)
+    const findSlotAndSpan = (day: string, slotStartMins: number) => {
+        // Find existing slot in data that starts approx at this time
+        const slot = slots.find(s =>
+            s.day_of_week === day &&
+            Math.abs(toMinutes(s.start_time) - slotStartMins) < 5
+        )
 
-                    // While we can fit a full slot before nextStart
-                    while (currentTime + duration <= nextStart) {
-                        filledSlots.push({
-                            start: fromMinutes(currentTime),
-                            end: fromMinutes(currentTime + duration),
-                            type: 'empty'
-                        })
-                        currentTime += duration
-                    }
+        if (!slot) return { slot: undefined, span: 1 }
 
-                    // If there is still a small gap, we force jump to nextStart
-                    // (Or add a partial slot? User said "remaining one cell should show empty")
-                    // We'll jump to avoid overlap.
-                    currentTime = nextStart
-                }
+        // Calculate Span by checking coverage against 'timeSlots'
+        let span = 1
+        const startIndex = timeSlots.findIndex(t => Math.abs(toMinutes(t.start) - slotStartMins) < 5)
 
-                // Add the existing nextSlot (and any others starting at same time)
-                // Actually we just add this slot (and duplicates handled by next iteration logic? No, we need to skip processed)
-                // But sortedSlots has unique start-ends.
-                // We should add ALL slots that match this start time/range? 
-
-                // Simplified: Just add the nextSlot and advance current
-                filledSlots.push(nextSlot)
-                currentTime = Math.max(currentTime, toMinutes(nextSlot.end))
-
-                // Remove this slot from consideration? No, `getNextSlot` finds >= currentTime.
-                // Since we advanced `currentTime` to `nextSlot.end`, the next call will find the NEXT one.
-
-            } else {
-                // No more existing slots, fill until end
-                while (currentTime + duration <= collegeEnd) {
-                    filledSlots.push({
-                        start: fromMinutes(currentTime),
-                        end: fromMinutes(currentTime + duration),
-                        type: 'empty'
-                    })
-                    currentTime += duration
-                }
-                // Handle remaining partial time at end?
-                if (currentTime < collegeEnd) {
-                    filledSlots.push({
-                        start: fromMinutes(currentTime),
-                        end: fromMinutes(collegeEnd),
-                        type: 'empty'
-                    })
-                    currentTime = collegeEnd
+        if (startIndex !== -1) {
+            for (let i = startIndex + 1; i < timeSlots.length; i++) {
+                const gridSlotEnd = toMinutes(timeSlots[i].end)
+                // tolerance of 1 min
+                if (gridSlotEnd <= toMinutes(slot.end_time) + 1) {
+                    span++
+                } else {
+                    break
                 }
             }
         }
 
-        return filledSlots
+        return { slot, span }
     }
 
-    const timeSlots = generateTimeSlots()
-
-    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    const workingDays = (settings?.working_days || []).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b))
+    // State for tracking rendered cells (to handle rowSpan/colSpan skipping)
+    const occupiedCells = new Set<string>() // format "Day-StartMins"
 
     const handleDownloadPDF = async () => {
         if (!printRef.current) return
@@ -485,15 +444,26 @@ export default function ExportTimetable() {
                                     <tr key={day}>
                                         <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb' }}>{day}</td>
                                         {timeSlots.map((time, i) => {
-                                            const slot = slots.find(s =>
-                                                s.day_of_week === day &&
-                                                Math.abs(toMinutes(s.start_time) - toMinutes(time.start)) < 5 // Match approximate start
-                                            )
-                                            // Handle Lunch in grid
+                                            const timeStartMins = toMinutes(time.start)
+                                            if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
+
+                                            const { slot, span } = findSlotAndSpan(day, timeStartMins)
+
+                                            // If found, mark spanned cells as occupied
+                                            if (slot && span > 1) {
+                                                // We need to mark FUTURE grid slots as occupied
+                                                // Iterate from i+1 to i+span-1
+                                                for (let k = 1; k < span; k++) {
+                                                    const nextStart = toMinutes(timeSlots[i + k].start)
+                                                    occupiedCells.add(`${day}-${nextStart}`)
+                                                }
+                                            }
+
+                                            // Handle Lunch in grid (Transposed: Row=Day, Col=Time)
                                             if (time.type === 'lunch') return <td key={i} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>LUNCH</td>
 
                                             return (
-                                                <td key={i} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', height: '60px' }}>
+                                                <td key={i} colSpan={span} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', height: '60px' }}>
                                                     {renderSlotContent(slot)}
                                                 </td>
                                             )
@@ -508,20 +478,29 @@ export default function ExportTimetable() {
                                             {time.type === 'lunch' && <div style={{ fontSize: '10px', color: '#b45309' }}>LUNCH</div>}
                                         </td>
                                         {workingDays.map(day => {
+                                            const timeStartMins = toMinutes(time.start)
+                                            if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
+
                                             // Special Case: If it's the lunch row
                                             if (time.type === 'lunch') {
                                                 if (day === workingDays[0]) { // First col
                                                     return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold' }}>LUNCH BREAK</td>
                                                 }
-                                                return null // Scip other cols
+                                                return null
                                             }
 
-                                            const slot = slots.find(s =>
-                                                s.day_of_week === day &&
-                                                Math.abs(toMinutes(s.start_time) - toMinutes(time.start)) < 5
-                                            )
+                                            const { slot, span } = findSlotAndSpan(day, timeStartMins)
+
+                                            // If found, mark spanned cells as occupied (Standard: Row=Time, Col=Day. Spanning means ROW SPAN)
+                                            if (slot && span > 1) {
+                                                for (let k = 1; k < span; k++) {
+                                                    const nextStart = toMinutes(timeSlots[i + k].start)
+                                                    occupiedCells.add(`${day}-${nextStart}`)
+                                                }
+                                            }
+
                                             return (
-                                                <td key={day} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', minWidth: '120px' }}>
+                                                <td key={day} rowSpan={span} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', minWidth: '120px' }}>
                                                     {renderSlotContent(slot)}
                                                 </td>
                                             )
