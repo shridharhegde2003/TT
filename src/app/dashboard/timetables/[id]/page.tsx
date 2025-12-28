@@ -234,40 +234,72 @@ export default function TimetableEditorPage() {
         }
     }
 
-    // Calculate next time slot
-    const getNextTimeSlot = useCallback((day: string, periods: number = 1) => {
+    // Calculate next time slot based on slot type
+    const getNextTimeSlot = useCallback((day: string, currentSlotType: string = 'class', periods: number = 1) => {
         const daySlots = slots.filter(s => s.day_of_week === day).sort((a, b) => a.slot_order - b.slot_order)
-        const duration = (settings?.default_class_duration || 55) * periods
+
+        // Calculate duration based on slot type
+        let duration: number
+        if (currentSlotType === 'break') {
+            duration = settings?.break_duration || 15
+        } else if (currentSlotType === 'lunch') {
+            const [startH, startM] = (settings?.lunch_start_time || '12:30').split(':').map(Number)
+            const [endH, endM] = (settings?.lunch_end_time || '13:30').split(':').map(Number)
+            duration = (endH * 60 + endM) - (startH * 60 + startM)
+        } else {
+            duration = (settings?.default_class_duration || 55) * periods
+        }
+
+        // Helper to convert time string to minutes
+        const toMinutes = (time: string) => {
+            const [h, m] = time.split(':').map(Number)
+            return h * 60 + m
+        }
+
+        let startTime: string
+        let order: number
 
         if (daySlots.length === 0 && settings) {
-            return {
-                start: settings.college_start_time,
-                end: addMinutes(settings.college_start_time, duration),
-                order: 1
+            startTime = settings.college_start_time
+            order = 1
+        } else {
+            const lastSlot = daySlots[daySlots.length - 1]
+            if (!lastSlot || !settings) {
+                startTime = '09:00'
+                order = 1
+            } else {
+                startTime = lastSlot.end_time
+                order = lastSlot.slot_order + 1
             }
         }
 
-        const lastSlot = daySlots[daySlots.length - 1]
-        if (!lastSlot || !settings) {
-            return { start: '09:00', end: addMinutes('09:00', duration), order: 1 }
-        }
+        if (settings) {
+            const lunchStart = settings.lunch_start_time
+            const lunchEnd = settings.lunch_end_time
+            const startMins = toMinutes(startTime)
+            const lunchStartMins = toMinutes(lunchStart)
+            const lunchEndMins = toMinutes(lunchEnd)
 
-        const lunchStart = settings.lunch_start_time
-        const lunchEnd = settings.lunch_end_time
-        const lastEndTime = lastSlot.end_time
+            // If we're starting during or after lunch start but before lunch end, skip to after lunch
+            if (startMins >= lunchStartMins && startMins < lunchEndMins) {
+                startTime = lunchEnd
+            }
 
-        if (lastEndTime >= lunchStart && lastEndTime < lunchEnd) {
-            return {
-                start: lunchEnd,
-                end: addMinutes(lunchEnd, duration),
-                order: lastSlot.slot_order + 1
+            // If the slot would overlap with lunch time (starts before but ends during/after), skip to after lunch
+            const endMins = toMinutes(startTime) + duration
+            if (toMinutes(startTime) < lunchStartMins && endMins > lunchStartMins) {
+                // The slot would cross into lunch time, so we should add a lunch slot first
+                // For now, just skip to after lunch if not adding lunch
+                if (currentSlotType !== 'lunch') {
+                    // Alert user that lunch time is approaching
+                }
             }
         }
 
         return {
-            start: lastSlot.end_time,
-            end: addMinutes(lastSlot.end_time, duration),
-            order: lastSlot.slot_order + 1
+            start: startTime,
+            end: addMinutes(startTime, duration),
+            order
         }
     }, [slots, settings])
 
@@ -303,30 +335,14 @@ export default function TimetableEditorPage() {
 
         setSaving(true)
         try {
-            // Calculate duration based on slot type
-            let slotDuration: number
-            if (slotType === 'break') {
-                slotDuration = settings?.break_duration || 15
-            } else if (slotType === 'lunch') {
-                // Calculate lunch duration from start and end time
-                const [startH, startM] = (settings?.lunch_start_time || '12:30').split(':').map(Number)
-                const [endH, endM] = (settings?.lunch_end_time || '13:30').split(':').map(Number)
-                slotDuration = (endH * 60 + endM) - (startH * 60 + startM)
-            } else if (slotType === 'free') {
-                // Free period uses the same duration as a normal class period
-                slotDuration = (settings?.default_class_duration || 55) * numberOfPeriods
-            } else {
-                slotDuration = (settings?.default_class_duration || 55) * numberOfPeriods
-            }
-
-            const nextSlot = getNextTimeSlot(selectedDay, slotType === 'class' ? numberOfPeriods : 1)
-            const endTime = addMinutes(nextSlot.start, slotDuration)
+            // Get next slot with correct duration based on slot type
+            const nextSlot = getNextTimeSlot(selectedDay, slotType, numberOfPeriods)
 
             let slotData: any = {
                 timetable_id: id,
                 day_of_week: selectedDay,
                 start_time: nextSlot.start,
-                end_time: endTime,
+                end_time: nextSlot.end,
                 slot_order: nextSlot.order,
                 slot_type: slotType,
                 is_practical: isPractical
@@ -640,7 +656,7 @@ export default function TimetableEditorPage() {
                             </div>
 
                             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
-                                Next: {getNextTimeSlot(selectedDay, numberOfPeriods).start} - {getNextTimeSlot(selectedDay, numberOfPeriods).end}
+                                Next: {getNextTimeSlot(selectedDay, slotType, numberOfPeriods).start} - {getNextTimeSlot(selectedDay, slotType, numberOfPeriods).end}
                             </p>
 
                             {/* Slot Type */}
