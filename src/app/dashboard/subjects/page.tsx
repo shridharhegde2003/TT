@@ -9,13 +9,7 @@ interface Subject {
     id: string
     name: string
     code: string
-    color: string
 }
-
-const COLORS = [
-    '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-    '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
-]
 
 export default function SubjectsPage() {
     const [subjects, setSubjects] = useState<Subject[]>([])
@@ -23,7 +17,6 @@ export default function SubjectsPage() {
     const [editingId, setEditingId] = useState<string | null>(null)
     const [name, setName] = useState('')
     const [code, setCode] = useState('')
-    const [color, setColor] = useState(COLORS[0])
     const [loading, setLoading] = useState(false)
 
     const supabase = createClient()
@@ -77,8 +70,7 @@ export default function SubjectsPage() {
             if (editingId) {
                 const { error } = await supabase.from('subjects').update({
                     name: name.trim(),
-                    code: code.trim(),
-                    color
+                    code: code.trim()
                 }).eq('id', editingId)
 
                 if (error) {
@@ -93,8 +85,7 @@ export default function SubjectsPage() {
                 const { error } = await supabase.from('subjects').insert({
                     user_id: user.id,
                     name: name.trim(),
-                    code: code.trim(),
-                    color
+                    code: code.trim()
                 })
 
                 if (error) {
@@ -114,7 +105,6 @@ export default function SubjectsPage() {
         setEditingId(subject.id)
         setName(subject.name)
         setCode(subject.code)
-        setColor(subject.color || COLORS[0])
         setShowForm(true)
     }
 
@@ -135,7 +125,6 @@ export default function SubjectsPage() {
         setEditingId(null)
         setName('')
         setCode('')
-        setColor(COLORS[Math.floor(Math.random() * COLORS.length)])
     }
 
     return (
@@ -168,19 +157,6 @@ export default function SubjectsPage() {
                 </button>
             </div>
 
-            {/* Info Note */}
-            <div style={{
-                background: '#f0f9ff',
-                border: '1px solid #bae6fd',
-                borderRadius: '8px',
-                padding: '12px 16px',
-                marginBottom: '24px',
-                color: '#0369a1',
-                fontSize: '14px'
-            }}>
-                <strong>Note:</strong> Theory/Practical type and number of periods are set when creating timetable entries, not here. This allows the same subject to be used for both theory and lab sessions.
-            </div>
-
             {/* Form */}
             {showForm && (
                 <div style={{
@@ -194,7 +170,7 @@ export default function SubjectsPage() {
                         {editingId ? 'Edit Subject' : 'Add New Subject'}
                     </h2>
                     <form onSubmit={handleSubmit}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                             <div>
                                 <label style={labelStyle}>Subject Name *</label>
                                 <input
@@ -214,26 +190,6 @@ export default function SubjectsPage() {
                                     placeholder="e.g., PY, DBMS, WT"
                                     style={inputStyle}
                                 />
-                            </div>
-                        </div>
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={labelStyle}>Color (for timetable display)</label>
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                {COLORS.map(c => (
-                                    <button
-                                        key={c}
-                                        type="button"
-                                        onClick={() => setColor(c)}
-                                        style={{
-                                            width: '36px',
-                                            height: '36px',
-                                            borderRadius: '8px',
-                                            background: c,
-                                            border: color === c ? '3px solid #111827' : '3px solid transparent',
-                                            cursor: 'pointer'
-                                        }}
-                                    />
-                                ))}
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '12px' }}>
@@ -281,7 +237,7 @@ export default function SubjectsPage() {
             )}
 
             {/* List */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '16px' }}>
                 {subjects.length === 0 ? (
                     <div style={{
                         gridColumn: '1 / -1',
@@ -301,31 +257,23 @@ export default function SubjectsPage() {
                             borderRadius: '12px',
                             padding: '20px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                            borderLeft: `4px solid ${subject.color || '#3b82f6'}`
+                            borderLeft: '4px solid #4f46e5'
                         }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                                <div>
-                                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
-                                        {subject.name}
-                                    </h3>
-                                    <span style={{
-                                        display: 'inline-block',
-                                        padding: '2px 8px',
-                                        background: '#f3f4f6',
-                                        borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: '600',
-                                        color: '#374151'
-                                    }}>
-                                        {subject.code}
-                                    </span>
-                                </div>
-                                <div style={{
-                                    width: '24px',
-                                    height: '24px',
-                                    borderRadius: '6px',
-                                    background: subject.color || '#3b82f6'
-                                }} />
+                            <div style={{ marginBottom: '16px' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
+                                    {subject.name}
+                                </h3>
+                                <span style={{
+                                    display: 'inline-block',
+                                    padding: '4px 10px',
+                                    background: '#eef2ff',
+                                    borderRadius: '4px',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    color: '#4f46e5'
+                                }}>
+                                    {subject.code}
+                                </span>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button
