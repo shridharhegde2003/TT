@@ -72,13 +72,23 @@ export default function AuthPage() {
                     .eq('user_id', data.user.id)
                     .single()
 
-                if (profile && !profile.is_onboarded) {
+                if (!profile) {
+                    // Profile doesn't exist, create it
+                    await supabase.from('user_profiles').insert([{
+                        user_id: data.user.id,
+                        full_name: data.user.user_metadata?.full_name || email.split('@')[0],
+                        email: email,
+                        is_onboarded: false
+                    }])
+                    router.push('/onboarding')
+                } else if (!profile.is_onboarded) {
                     router.push('/onboarding')
                 } else {
                     router.push('/dashboard')
                 }
             }
         } catch (error) {
+            console.error('Login error:', error)
             toast({
                 title: 'Error',
                 description: 'An unexpected error occurred',
@@ -122,38 +132,53 @@ export default function AuthPage() {
             })
 
             if (error) {
+                console.error('Signup error:', error)
                 toast({
                     title: 'Sign Up Failed',
                     description: error.message,
                     variant: 'destructive'
                 })
-            } else if (data.user) {
-                // Create user profile
-                await supabase.from('user_profiles').insert([{
-                    user_id: data.user.id,
-                    full_name: fullName,
-                    email: email,
-                    is_onboarded: false
-                }])
+                return
+            }
 
+            if (data.user) {
+                // Only try to create profile if we have a session (email confirmation disabled)
                 if (data.session) {
+                    try {
+                        const { error: profileError } = await supabase.from('user_profiles').insert([{
+                            user_id: data.user.id,
+                            full_name: fullName,
+                            email: email,
+                            is_onboarded: false
+                        }])
+
+                        if (profileError) {
+                            console.error('Profile creation error:', profileError)
+                            // Profile might already exist via trigger, continue anyway
+                        }
+                    } catch (err) {
+                        console.error('Profile creation exception:', err)
+                    }
+
                     toast({
                         title: 'Account Created!',
                         description: 'Welcome to TimeTable Pro',
                     })
                     router.push('/onboarding')
                 } else {
+                    // Email confirmation is required
                     toast({
                         title: 'Check Your Email',
-                        description: 'We sent you a confirmation link.',
+                        description: 'We sent you a confirmation link. Please check your email to verify your account.',
                     })
                     setMode('login')
                 }
             }
         } catch (error) {
+            console.error('Signup exception:', error)
             toast({
                 title: 'Error',
-                description: 'An unexpected error occurred',
+                description: 'An unexpected error occurred during signup',
                 variant: 'destructive'
             })
         } finally {
