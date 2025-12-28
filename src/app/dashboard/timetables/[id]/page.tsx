@@ -106,7 +106,7 @@ export default function TimetableEditorPage() {
     // Add slot form
     const [showAddForm, setShowAddForm] = useState(false)
     const [selectedDay, setSelectedDay] = useState('')
-    const [slotType, setSlotType] = useState<'class' | 'break' | 'lunch' | 'free'>('class')
+    const [slotType, setSlotType] = useState<'class' | 'break' | 'free'>('class')
     const [selectedSubject, setSelectedSubject] = useState('')
     const [selectedLecturer, setSelectedLecturer] = useState('')
     const [selectedClassroom, setSelectedClassroom] = useState('')
@@ -311,6 +311,15 @@ export default function TimetableEditorPage() {
         return `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`
     }
 
+    // Convert 24-hour time to 12-hour format
+    const formatTime12 = (timeStr: string): string => {
+        if (!timeStr) return ''
+        const [hours, mins] = timeStr.split(':').map(Number)
+        const period = hours >= 12 ? 'PM' : 'AM'
+        const hour12 = hours % 12 || 12
+        return `${hour12}:${String(mins).padStart(2, '0')} ${period}`
+    }
+
     // Add slot
     const handleAddSlot = async () => {
         if (!selectedDay) {
@@ -335,8 +344,51 @@ export default function TimetableEditorPage() {
 
         setSaving(true)
         try {
+            // Helper to convert time string to minutes
+            const toMinutes = (time: string) => {
+                const [h, m] = time.split(':').map(Number)
+                return h * 60 + m
+            }
+
             // Get next slot with correct duration based on slot type
-            const nextSlot = getNextTimeSlot(selectedDay, slotType, numberOfPeriods)
+            let nextSlot = getNextTimeSlot(selectedDay, slotType, numberOfPeriods)
+
+            // Check if we need to auto-insert lunch
+            if (settings) {
+                const lunchStart = settings.lunch_start_time
+                const lunchEnd = settings.lunch_end_time
+                const lunchStartMins = toMinutes(lunchStart)
+                const lunchEndMins = toMinutes(lunchEnd)
+                const nextStartMins = toMinutes(nextSlot.start)
+
+                // Check if there's already a lunch slot for this day
+                const daySlots = slots.filter(s => s.day_of_week === selectedDay)
+                const hasLunchSlot = daySlots.some(s => s.slot_type === 'lunch')
+
+                // If next slot starts at lunch time and no lunch exists, auto-insert lunch first
+                if (!hasLunchSlot && nextStartMins >= lunchStartMins && nextStartMins < lunchEndMins) {
+                    // Insert lunch slot first
+                    const lunchDuration = lunchEndMins - lunchStartMins
+                    await supabase.from('timetable_slots').insert([{
+                        timetable_id: id,
+                        day_of_week: selectedDay,
+                        start_time: lunchStart,
+                        end_time: lunchEnd,
+                        slot_order: nextSlot.order,
+                        slot_type: 'lunch',
+                        is_practical: false
+                    }])
+
+                    toast({ title: 'Lunch Added', description: 'Lunch break was automatically added' })
+
+                    // Recalculate next slot after lunch
+                    nextSlot = {
+                        start: lunchEnd,
+                        end: addMinutes(lunchEnd, slotType === 'break' ? (settings?.break_duration || 15) : (settings?.default_class_duration || 55) * numberOfPeriods),
+                        order: nextSlot.order + 1
+                    }
+                }
+            }
 
             let slotData: any = {
                 timetable_id: id,
@@ -551,10 +603,10 @@ export default function TimetableEditorPage() {
                                             alignItems: 'center'
                                         }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                <div style={{ textAlign: 'center', minWidth: '70px' }}>
-                                                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>{slot.start_time}</p>
+                                                <div style={{ textAlign: 'center', minWidth: '80px' }}>
+                                                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>{formatTime12(slot.start_time)}</p>
                                                     <p style={{ fontSize: '12px', color: '#9ca3af' }}>to</p>
-                                                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>{slot.end_time}</p>
+                                                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>{formatTime12(slot.end_time)}</p>
                                                 </div>
 
                                                 {slot.slot_type === 'lunch' && (
@@ -656,19 +708,20 @@ export default function TimetableEditorPage() {
                             </div>
 
                             <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
-                                Next: {getNextTimeSlot(selectedDay, slotType, numberOfPeriods).start} - {getNextTimeSlot(selectedDay, slotType, numberOfPeriods).end}
+                                Next: {formatTime12(getNextTimeSlot(selectedDay, slotType, numberOfPeriods).start)} - {formatTime12(getNextTimeSlot(selectedDay, slotType, numberOfPeriods).end)}
                             </p>
 
                             {/* Slot Type */}
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={labelStyle}>Slot Type</label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                    {(['class', 'free', 'break', 'lunch'] as const).map((type) => (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    {(['class', 'free', 'break'] as const).map((type) => (
                                         <button
                                             key={type}
                                             onClick={() => setSlotType(type)}
                                             style={{
                                                 ...buttonStyle,
+                                                flex: 1,
                                                 background: slotType === type ? '#4f46e5' : '#f3f4f6',
                                                 color: slotType === type ? 'white' : '#374151',
                                                 display: 'flex',
@@ -680,7 +733,6 @@ export default function TimetableEditorPage() {
                                             {type === 'class' && <BookOpen size={14} />}
                                             {type === 'free' && <Clock size={14} />}
                                             {type === 'break' && <Coffee size={14} />}
-                                            {type === 'lunch' && <UtensilsCrossed size={14} />}
                                             {type === 'free' ? 'Free/Gap' : type.charAt(0).toUpperCase() + type.slice(1)}
                                         </button>
                                     ))}
