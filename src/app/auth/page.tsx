@@ -11,15 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Calendar, ArrowLeft, Loader2, Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-type AuthMode = 'check' | 'login' | 'signup'
+type AuthMode = 'initial' | 'login' | 'signup'
 
 export default function AuthPage() {
-    const [mode, setMode] = useState<AuthMode>('check')
+    const [mode, setMode] = useState<AuthMode>('initial')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [fullName, setFullName] = useState('')
     const [loading, setLoading] = useState(false)
-    const [checking, setChecking] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const router = useRouter()
     const supabase = createClient()
@@ -35,50 +34,6 @@ export default function AuthPage() {
         }
         checkUser()
     }, [router, supabase.auth])
-
-    const checkEmailExists = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!email) {
-            toast({
-                title: 'Email Required',
-                description: 'Please enter your email address',
-                variant: 'destructive'
-            })
-            return
-        }
-
-        setChecking(true)
-        try {
-            // Try to sign in with a wrong password to check if email exists
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password: 'check_if_exists_dummy_password_12345'
-            })
-
-            if (error) {
-                if (error.message.includes('Invalid login credentials')) {
-                    // Email exists, show login form
-                    setMode('login')
-                } else if (error.message.includes('Email not confirmed')) {
-                    // Email exists but not confirmed
-                    toast({
-                        title: 'Email Not Confirmed',
-                        description: 'Please check your email and confirm your account',
-                        variant: 'destructive'
-                    })
-                    setMode('login')
-                } else {
-                    // Email doesn't exist, show signup form
-                    setMode('signup')
-                }
-            }
-        } catch (error) {
-            // If error, assume email doesn't exist
-            setMode('signup')
-        } finally {
-            setChecking(false)
-        }
-    }
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -99,17 +54,38 @@ export default function AuthPage() {
             })
 
             if (error) {
-                toast({
-                    title: 'Login Failed',
-                    description: error.message,
-                    variant: 'destructive'
-                })
+                // Check if it's because user doesn't exist
+                if (error.message.includes('Invalid login credentials')) {
+                    toast({
+                        title: 'Login Failed',
+                        description: 'Invalid email or password. If you are new, click "Create Account" instead.',
+                        variant: 'destructive'
+                    })
+                } else {
+                    toast({
+                        title: 'Login Failed',
+                        description: error.message,
+                        variant: 'destructive'
+                    })
+                }
             } else if (data.user) {
                 toast({
                     title: 'Welcome Back!',
                     description: 'Successfully logged in',
                 })
-                router.push('/dashboard')
+
+                // Check if user has completed onboarding
+                const { data: profile } = await supabase
+                    .from('user_profiles')
+                    .select('is_onboarded')
+                    .eq('user_id', data.user.id)
+                    .single()
+
+                if (profile && !profile.is_onboarded) {
+                    router.push('/onboarding')
+                } else {
+                    router.push('/dashboard')
+                }
             }
         } catch (error) {
             toast({
@@ -150,7 +126,8 @@ export default function AuthPage() {
                 options: {
                     data: {
                         full_name: fullName
-                    }
+                    },
+                    emailRedirectTo: `${window.location.origin}/auth/callback`
                 }
             })
 
@@ -162,18 +139,33 @@ export default function AuthPage() {
                 })
             } else if (data.user) {
                 // Create user profile
-                await supabase.from('user_profiles').insert([{
+                const { error: profileError } = await supabase.from('user_profiles').insert([{
                     user_id: data.user.id,
                     full_name: fullName,
                     email: email,
                     is_onboarded: false
                 }])
 
-                toast({
-                    title: 'Account Created!',
-                    description: 'Welcome to TimeTable Pro',
-                })
-                router.push('/onboarding')
+                if (profileError) {
+                    console.error('Profile creation error:', profileError)
+                }
+
+                // Check if email confirmation is required
+                if (data.session) {
+                    // No email confirmation required, proceed to onboarding
+                    toast({
+                        title: 'Account Created!',
+                        description: 'Welcome to TimeTable Pro',
+                    })
+                    router.push('/onboarding')
+                } else {
+                    // Email confirmation required
+                    toast({
+                        title: 'Check Your Email',
+                        description: 'We sent you a confirmation link. Please check your email.',
+                    })
+                    setMode('login')
+                }
             }
         } catch (error) {
             toast({
@@ -186,8 +178,20 @@ export default function AuthPage() {
         }
     }
 
+    const switchToLogin = () => {
+        setMode('login')
+        setPassword('')
+        setFullName('')
+    }
+
+    const switchToSignup = () => {
+        setMode('signup')
+        setPassword('')
+    }
+
     const goBack = () => {
-        setMode('check')
+        setMode('initial')
+        setEmail('')
         setPassword('')
         setFullName('')
     }
@@ -216,50 +220,34 @@ export default function AuthPage() {
                 <Card className="premium-card border-0 shadow-2xl">
                     <CardHeader className="space-y-1 pb-4">
                         <CardTitle className="text-2xl text-center">
-                            {mode === 'check' && 'Welcome'}
-                            {mode === 'login' && 'Welcome Back'}
+                            {mode === 'initial' && 'Welcome'}
+                            {mode === 'login' && 'Sign In'}
                             {mode === 'signup' && 'Create Account'}
                         </CardTitle>
                         <CardDescription className="text-center">
-                            {mode === 'check' && 'Enter your email to get started'}
-                            {mode === 'login' && 'Enter your password to continue'}
-                            {mode === 'signup' && 'Set up your new account'}
+                            {mode === 'initial' && 'Sign in to your account or create a new one'}
+                            {mode === 'login' && 'Enter your credentials to continue'}
+                            {mode === 'signup' && 'Fill in the details to get started'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {/* Check Email Form */}
-                        {mode === 'check' && (
-                            <form onSubmit={checkEmailExists} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        <Input
-                                            id="email"
-                                            type="email"
-                                            placeholder="you@example.com"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="pl-10 h-12"
-                                            required
-                                        />
-                                    </div>
-                                </div>
+                        {/* Initial Choice */}
+                        {mode === 'initial' && (
+                            <div className="space-y-4">
                                 <Button
-                                    type="submit"
+                                    onClick={switchToLogin}
                                     className="w-full h-12 btn-gradient"
-                                    disabled={checking}
                                 >
-                                    {checking ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                            Checking...
-                                        </>
-                                    ) : (
-                                        'Continue'
-                                    )}
+                                    Sign In
                                 </Button>
-                            </form>
+                                <Button
+                                    onClick={switchToSignup}
+                                    variant="outline"
+                                    className="w-full h-12"
+                                >
+                                    Create New Account
+                                </Button>
+                            </div>
                         )}
 
                         {/* Login Form */}
@@ -272,10 +260,12 @@ export default function AuthPage() {
                                         <Input
                                             id="email"
                                             type="email"
+                                            placeholder="you@example.com"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
                                             className="pl-10 h-12"
-                                            disabled
+                                            required
+                                            autoFocus
                                         />
                                     </div>
                                 </div>
@@ -291,7 +281,6 @@ export default function AuthPage() {
                                             onChange={(e) => setPassword(e.target.value)}
                                             className="pl-10 pr-10 h-12"
                                             required
-                                            autoFocus
                                         />
                                         <button
                                             type="button"
@@ -316,35 +305,31 @@ export default function AuthPage() {
                                         'Sign In'
                                     )}
                                 </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="w-full"
-                                    onClick={goBack}
-                                >
-                                    <ArrowLeft className="w-4 h-4 mr-2" />
-                                    Use different email
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="flex-1"
+                                        onClick={goBack}
+                                    >
+                                        <ArrowLeft className="w-4 h-4 mr-2" />
+                                        Back
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="flex-1"
+                                        onClick={switchToSignup}
+                                    >
+                                        Create Account
+                                    </Button>
+                                </div>
                             </form>
                         )}
 
                         {/* Sign Up Form */}
                         {mode === 'signup' && (
                             <form onSubmit={handleSignUp} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                        <Input
-                                            id="email"
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="pl-10 h-12"
-                                            disabled
-                                        />
-                                    </div>
-                                </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="fullName">Full Name</Label>
                                     <div className="relative">
@@ -358,6 +343,21 @@ export default function AuthPage() {
                                             className="pl-10 h-12"
                                             required
                                             autoFocus
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="email">Email Address</Label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            placeholder="you@example.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            className="pl-10 h-12"
+                                            required
                                         />
                                     </div>
                                 </div>
@@ -397,15 +397,25 @@ export default function AuthPage() {
                                         'Create Account'
                                     )}
                                 </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="w-full"
-                                    onClick={goBack}
-                                >
-                                    <ArrowLeft className="w-4 h-4 mr-2" />
-                                    Use different email
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="flex-1"
+                                        onClick={goBack}
+                                    >
+                                        <ArrowLeft className="w-4 h-4 mr-2" />
+                                        Back
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="flex-1"
+                                        onClick={switchToLogin}
+                                    >
+                                        Sign In Instead
+                                    </Button>
+                                </div>
                             </form>
                         )}
                     </CardContent>
