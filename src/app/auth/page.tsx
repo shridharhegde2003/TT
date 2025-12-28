@@ -75,6 +75,18 @@ export default function AuthPage() {
             toast({ title: 'Signup Failed', description: error.message, variant: 'destructive' })
         } else if (data.user) {
             if (data.session) {
+                // Create user profile after successful signup
+                try {
+                    await supabase.from('user_profiles').upsert({
+                        user_id: data.user.id,
+                        full_name: fullName,
+                        email: email,
+                        is_onboarded: false
+                    }, { onConflict: 'user_id' })
+                } catch (profileError) {
+                    console.log('Profile creation will happen on first login')
+                }
+
                 toast({ title: 'Account Created!', description: 'Welcome to TimeTable Pro' })
                 router.push('/onboarding')
             } else {
