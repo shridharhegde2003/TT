@@ -13,7 +13,6 @@ import { useToast } from '@/hooks/use-toast'
 import {
     Plus,
     Trash2,
-    Save,
     Loader2,
     ArrowLeft,
     AlertTriangle,
@@ -23,8 +22,9 @@ import {
     Coffee,
     UtensilsCrossed,
     BookOpen,
-    Beaker,
-    X
+    FlaskConical,
+    X,
+    Users
 } from 'lucide-react'
 import type {
     Timetable,
@@ -72,6 +72,7 @@ export default function TimetableEditorPage() {
     const [selectedLecturer, setSelectedLecturer] = useState('')
     const [selectedClassroom, setSelectedClassroom] = useState('')
     const [isPractical, setIsPractical] = useState(false)
+    const [numberOfPeriods, setNumberOfPeriods] = useState(1)
     const [labBatches, setLabBatches] = useState<{ batch_name: string, subject_id: string, lecturer_id: string }[]>([])
     const [conflictWarning, setConflictWarning] = useState<string | null>(null)
 
@@ -150,50 +151,39 @@ export default function TimetableEditorPage() {
     }
 
     // Calculate next time slot
-    const getNextTimeSlot = useCallback((day: string) => {
+    const getNextTimeSlot = useCallback((day: string, periods: number = 1) => {
         const daySlots = slots.filter(s => s.day_of_week === day).sort((a, b) => a.slot_order - b.slot_order)
+        const duration = (settings?.default_class_duration || 55) * periods
 
         if (daySlots.length === 0 && settings) {
             return {
                 start: settings.college_start_time,
-                end: addMinutes(settings.college_start_time, settings.default_class_duration),
+                end: addMinutes(settings.college_start_time, duration),
                 order: 1
             }
         }
 
         const lastSlot = daySlots[daySlots.length - 1]
         if (!lastSlot || !settings) {
-            return { start: '09:00', end: '10:00', order: 1 }
+            return { start: '09:00', end: addMinutes('09:00', duration), order: 1 }
         }
 
-        // Check if we need to add lunch break
+        // Check if we need to skip lunch break
         const lunchStart = settings.lunch_start_time
         const lunchEnd = settings.lunch_end_time
         const lastEndTime = lastSlot.end_time
 
-        // If last slot ends before or at lunch start, check if we're entering lunch
         if (lastEndTime >= lunchStart && lastEndTime < lunchEnd) {
             return {
                 start: lunchEnd,
-                end: addMinutes(lunchEnd, settings.default_class_duration),
+                end: addMinutes(lunchEnd, duration),
                 order: lastSlot.slot_order + 1
-            }
-        }
-
-        // Check breaks
-        for (const brk of settings.breaks || []) {
-            if (lastEndTime >= brk.start_time && lastEndTime < brk.end_time) {
-                return {
-                    start: brk.end_time,
-                    end: addMinutes(brk.end_time, settings.default_class_duration),
-                    order: lastSlot.slot_order + 1
-                }
             }
         }
 
         return {
             start: lastSlot.end_time,
-            end: addMinutes(lastSlot.end_time, settings.default_class_duration),
+            end: addMinutes(lastSlot.end_time, duration),
             order: lastSlot.slot_order + 1
         }
     }, [slots, settings])
@@ -210,7 +200,6 @@ export default function TimetableEditorPage() {
     const checkLecturerConflict = async (lecturerId: string, day: string, startTime: string, endTime: string) => {
         if (!lecturerId) return null
 
-        // Check in current timetable slots
         const conflictInCurrent = slots.find(s =>
             s.day_of_week === day &&
             s.lecturer_id === lecturerId &&
@@ -219,10 +208,9 @@ export default function TimetableEditorPage() {
         )
 
         if (conflictInCurrent) {
-            return `Already assigned in this timetable at ${conflictInCurrent.start_time}`
+            return `Already assigned at ${conflictInCurrent.start_time}`
         }
 
-        // Check in other timetables
         const { data: otherSlots } = await supabase
             .from('timetable_slots')
             .select('*, timetable:timetables(class_name, semester, section)')
@@ -234,7 +222,7 @@ export default function TimetableEditorPage() {
             if ((startTime >= slot.start_time && startTime < slot.end_time) ||
                 (endTime > slot.start_time && endTime <= slot.end_time)) {
                 const tt = slot.timetable as any
-                return `Conflict: ${tt.class_name} Sem ${tt.semester}${tt.section ? ` Section ${tt.section}` : ''}`
+                return `Conflict: ${tt.class_name} Sem ${tt.semester}`
             }
         }
 
@@ -250,7 +238,7 @@ export default function TimetableEditorPage() {
             return
         }
 
-        const nextSlot = getNextTimeSlot(selectedDay)
+        const nextSlot = getNextTimeSlot(selectedDay, numberOfPeriods)
         const conflict = await checkLecturerConflict(lecturerId, selectedDay, nextSlot.start, nextSlot.end)
         setConflictWarning(conflict)
     }
@@ -262,19 +250,24 @@ export default function TimetableEditorPage() {
             return
         }
 
-        if (slotType === 'class' && (!selectedSubject || !selectedLecturer || !selectedClassroom)) {
-            toast({ title: 'Missing Fields', description: 'Please fill all required fields', variant: 'destructive' })
+        if (slotType === 'class' && !selectedClassroom) {
+            toast({ title: 'Missing Fields', description: 'Please select a classroom/lab', variant: 'destructive' })
+            return
+        }
+
+        if (slotType === 'class' && !isPractical && (!selectedSubject || !selectedLecturer)) {
+            toast({ title: 'Missing Fields', description: 'Please select subject and lecturer', variant: 'destructive' })
             return
         }
 
         if (isPractical && labBatches.length === 0) {
-            toast({ title: 'Add Batches', description: 'Please add at least one lab batch', variant: 'destructive' })
+            toast({ title: 'Add Batches', description: 'Please add at least one batch', variant: 'destructive' })
             return
         }
 
         setSaving(true)
         try {
-            const nextSlot = getNextTimeSlot(selectedDay)
+            const nextSlot = getNextTimeSlot(selectedDay, numberOfPeriods)
 
             let slotData: any = {
                 timetable_id: id,
@@ -287,7 +280,7 @@ export default function TimetableEditorPage() {
             }
 
             if (slotType === 'class') {
-                slotData.subject_id = selectedSubject
+                slotData.subject_id = isPractical ? null : selectedSubject
                 slotData.lecturer_id = isPractical ? null : selectedLecturer
                 slotData.classroom_id = selectedClassroom
             }
@@ -319,11 +312,12 @@ export default function TimetableEditorPage() {
             setSelectedLecturer('')
             setSelectedClassroom('')
             setIsPractical(false)
+            setNumberOfPeriods(1)
             setLabBatches([])
             setConflictWarning(null)
             setShowAddForm(false)
 
-            fetchData() // Refresh data
+            fetchData()
         } catch (error) {
             console.error('Error adding slot:', error)
             toast({ title: 'Error', description: 'Failed to add slot', variant: 'destructive' })
@@ -372,7 +366,7 @@ export default function TimetableEditorPage() {
 
     // Add lab batch
     const addLabBatch = () => {
-        setLabBatches([...labBatches, { batch_name: `Batch ${labBatches.length + 1}`, subject_id: '', lecturer_id: '' }])
+        setLabBatches([...labBatches, { batch_name: `B${labBatches.length + 1}`, subject_id: '', lecturer_id: '' }])
     }
 
     const updateLabBatch = (index: number, field: string, value: string) => {
@@ -383,6 +377,20 @@ export default function TimetableEditorPage() {
 
     const removeLabBatch = (index: number) => {
         setLabBatches(labBatches.filter((_, i) => i !== index))
+    }
+
+    // Format batch display
+    const formatBatchDisplay = (slot: SlotWithDetails) => {
+        if (!slot.lab_batches || slot.lab_batches.length === 0) return null
+
+        const subjects = slot.lab_batches.map((b, i) => {
+            const subj = b.subject
+            return subj?.code || subj?.name?.substring(0, 3).toUpperCase() || `Sub${i + 1}`
+        }).join(', ')
+
+        const lecturers = slot.lab_batches.map(b => b.lecturer?.short_name || '').filter(Boolean).join(', ')
+
+        return { subjects, lecturers }
     }
 
     if (loading) {
@@ -488,87 +496,93 @@ export default function TimetableEditorPage() {
                                 {slots
                                     .filter(s => s.day_of_week === selectedDay)
                                     .sort((a, b) => a.slot_order - b.slot_order)
-                                    .map((slot, index) => (
-                                        <Card key={slot.id} className="premium-card">
-                                            <CardContent className="py-4">
-                                                <div className="flex items-start justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="text-center min-w-[80px]">
-                                                            <p className="text-sm font-medium text-gray-500">
-                                                                {slot.start_time}
-                                                            </p>
-                                                            <p className="text-xs text-gray-400">to</p>
-                                                            <p className="text-sm font-medium text-gray-500">
-                                                                {slot.end_time}
-                                                            </p>
+                                    .map((slot) => {
+                                        const batchDisplay = formatBatchDisplay(slot)
+                                        return (
+                                            <Card key={slot.id} className="premium-card">
+                                                <CardContent className="py-4">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="text-center min-w-[80px]">
+                                                                <p className="text-sm font-medium text-gray-500">
+                                                                    {slot.start_time}
+                                                                </p>
+                                                                <p className="text-xs text-gray-400">to</p>
+                                                                <p className="text-sm font-medium text-gray-500">
+                                                                    {slot.end_time}
+                                                                </p>
+                                                            </div>
+
+                                                            {slot.slot_type === 'lunch' && (
+                                                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                                                                    <UtensilsCrossed className="w-5 h-5 text-orange-600" />
+                                                                    <span className="font-medium text-orange-700 dark:text-orange-300">Lunch Break</span>
+                                                                </div>
+                                                            )}
+
+                                                            {slot.slot_type === 'break' && (
+                                                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                                                                    <Coffee className="w-5 h-5 text-blue-600" />
+                                                                    <span className="font-medium text-blue-700 dark:text-blue-300">Break</span>
+                                                                </div>
+                                                            )}
+
+                                                            {slot.slot_type === 'class' && (
+                                                                <div className="flex-1">
+                                                                    {slot.is_practical && batchDisplay ? (
+                                                                        // Practical/Lab with batches display
+                                                                        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                                                                            <div className="flex items-center gap-2 mb-2">
+                                                                                <FlaskConical className="w-5 h-5 text-green-600" />
+                                                                                <span className="font-semibold text-green-700 dark:text-green-300">
+                                                                                    {batchDisplay.subjects}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p className="text-sm text-green-600 dark:text-green-400 mb-1">
+                                                                                {slot.classroom?.name}
+                                                                            </p>
+                                                                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                                ({batchDisplay.lecturers})
+                                                                            </p>
+                                                                            <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                                                                                <Users className="w-3 h-3" />
+                                                                                {slot.lab_batches?.length} batch(es)
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        // Theory class display
+                                                                        <div className="flex items-center gap-2">
+                                                                            <div
+                                                                                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                                                                style={{ backgroundColor: slot.subject?.color || '#3B82F6' }}
+                                                                            >
+                                                                                <BookOpen className="w-4 h-4 text-white" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="font-semibold">{slot.subject?.name}</p>
+                                                                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                                    {slot.lecturer?.short_name} • {slot.classroom?.name}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
 
-                                                        {slot.slot_type === 'lunch' && (
-                                                            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                                                                <UtensilsCrossed className="w-5 h-5 text-orange-600" />
-                                                                <span className="font-medium text-orange-700 dark:text-orange-300">Lunch Break</span>
-                                                            </div>
-                                                        )}
-
-                                                        {slot.slot_type === 'break' && (
-                                                            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                                                                <Coffee className="w-5 h-5 text-blue-600" />
-                                                                <span className="font-medium text-blue-700 dark:text-blue-300">Break</span>
-                                                            </div>
-                                                        )}
-
-                                                        {slot.slot_type === 'class' && (
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-2 mb-1">
-                                                                    <div
-                                                                        className="w-8 h-8 rounded-lg flex items-center justify-center"
-                                                                        style={{ backgroundColor: slot.subject?.color || '#3B82F6' }}
-                                                                    >
-                                                                        {slot.is_practical ? (
-                                                                            <Beaker className="w-4 h-4 text-white" />
-                                                                        ) : (
-                                                                            <BookOpen className="w-4 h-4 text-white" />
-                                                                        )}
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="font-semibold">{slot.subject?.name}</p>
-                                                                        {slot.subject?.code && (
-                                                                            <p className="text-xs text-gray-500">{slot.subject.code}</p>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-
-                                                                {slot.is_practical && slot.lab_batches && slot.lab_batches.length > 0 ? (
-                                                                    <div className="mt-2 pl-10 space-y-1">
-                                                                        {slot.lab_batches.map((batch, i) => (
-                                                                            <div key={i} className="text-sm text-gray-600 dark:text-gray-400">
-                                                                                <span className="font-medium">{batch.batch_name}:</span>
-                                                                                {' '}{batch.subject?.name || 'No subject'}
-                                                                                {batch.lecturer && ` (${batch.lecturer.short_name})`}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                ) : (
-                                                                    <p className="text-sm text-gray-600 dark:text-gray-400 pl-10">
-                                                                        {slot.lecturer?.full_name} ({slot.lecturer?.short_name}) • {slot.classroom?.name}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDeleteSlot(slot.id)}
+                                                            className="text-gray-400 hover:text-red-600"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </Button>
                                                     </div>
-
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDeleteSlot(slot.id)}
-                                                        className="text-gray-400 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
+                                                </CardContent>
+                                            </Card>
+                                        )
+                                    })}
                             </div>
                         ) : (
                             <Card className="premium-card">
@@ -595,7 +609,7 @@ export default function TimetableEditorPage() {
                                     </Button>
                                 </div>
                                 <p className="text-sm text-gray-500">
-                                    Next slot: {getNextTimeSlot(selectedDay).start} - {getNextTimeSlot(selectedDay).end}
+                                    Next: {getNextTimeSlot(selectedDay, numberOfPeriods).start} - {getNextTimeSlot(selectedDay, numberOfPeriods).end}
                                 </p>
                             </CardHeader>
                             <CardContent className="space-y-4">
@@ -630,36 +644,42 @@ export default function TimetableEditorPage() {
                                                     <input
                                                         type="radio"
                                                         checked={!isPractical}
-                                                        onChange={() => { setIsPractical(false); setLabBatches([]); }}
+                                                        onChange={() => { setIsPractical(false); setLabBatches([]); setNumberOfPeriods(1); }}
                                                     />
+                                                    <BookOpen className="w-4 h-4" />
                                                     <span>Theory</span>
                                                 </label>
                                                 <label className="flex items-center gap-2 cursor-pointer">
                                                     <input
                                                         type="radio"
                                                         checked={isPractical}
-                                                        onChange={() => setIsPractical(true)}
+                                                        onChange={() => { setIsPractical(true); setNumberOfPeriods(2); }}
                                                     />
+                                                    <FlaskConical className="w-4 h-4" />
                                                     <span>Practical/Lab</span>
                                                 </label>
                                             </div>
                                         </div>
 
-                                        {/* Subject */}
+                                        {/* Number of Periods */}
                                         <div className="space-y-2">
-                                            <Label>Subject</Label>
-                                            <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select subject" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {subjects.map((subj) => (
-                                                        <SelectItem key={subj.id} value={subj.id}>
-                                                            {subj.name} {subj.code && `(${subj.code})`}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
+                                            <Label>Number of Periods</Label>
+                                            <div className="flex gap-2">
+                                                {[1, 2, 3].map(num => (
+                                                    <Button
+                                                        key={num}
+                                                        variant={numberOfPeriods === num ? 'default' : 'outline'}
+                                                        size="sm"
+                                                        onClick={() => setNumberOfPeriods(num)}
+                                                        className={numberOfPeriods === num ? 'btn-gradient' : ''}
+                                                    >
+                                                        {num}
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                Duration: {(settings?.default_class_duration || 55) * numberOfPeriods} mins
+                                            </p>
                                         </div>
 
                                         {/* Classroom */}
@@ -679,35 +699,58 @@ export default function TimetableEditorPage() {
                                             </Select>
                                         </div>
 
-                                        {/* Theory: Single Lecturer */}
+                                        {/* Theory: Subject & Lecturer */}
                                         {!isPractical && (
-                                            <div className="space-y-2">
-                                                <Label>Lecturer</Label>
-                                                <Select value={selectedLecturer} onValueChange={handleLecturerSelect}>
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select lecturer" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {lecturers.map((lec) => (
-                                                            <SelectItem key={lec.id} value={lec.id}>
-                                                                {lec.full_name} ({lec.short_name})
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                            <>
+                                                <div className="space-y-2">
+                                                    <Label>Subject</Label>
+                                                    <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select subject" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {subjects.map((subj) => (
+                                                                <SelectItem key={subj.id} value={subj.id}>
+                                                                    {subj.name} {subj.code && `(${subj.code})`}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Lecturer</Label>
+                                                    <Select value={selectedLecturer} onValueChange={handleLecturerSelect}>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Select lecturer" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {lecturers.map((lec) => (
+                                                                <SelectItem key={lec.id} value={lec.id}>
+                                                                    {lec.full_name} ({lec.short_name})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </>
                                         )}
 
                                         {/* Practical: Lab Batches */}
                                         {isPractical && (
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between">
-                                                    <Label>Lab Batches</Label>
+                                                    <Label>Batches ({labBatches.length})</Label>
                                                     <Button size="sm" variant="outline" onClick={addLabBatch}>
                                                         <Plus className="w-3 h-3 mr-1" />
-                                                        Add Batch
+                                                        Add
                                                     </Button>
                                                 </div>
+
+                                                {labBatches.length === 0 && (
+                                                    <p className="text-sm text-gray-500 text-center py-4">
+                                                        Add batches for this practical session
+                                                    </p>
+                                                )}
 
                                                 {labBatches.map((batch, index) => (
                                                     <div key={index} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 space-y-2">
@@ -716,7 +759,7 @@ export default function TimetableEditorPage() {
                                                                 value={batch.batch_name}
                                                                 onChange={(e) => updateLabBatch(index, 'batch_name', e.target.value)}
                                                                 placeholder="Batch name"
-                                                                className="w-24"
+                                                                className="w-20"
                                                             />
                                                             <Button
                                                                 variant="ghost"
@@ -735,7 +778,7 @@ export default function TimetableEditorPage() {
                                                             </SelectTrigger>
                                                             <SelectContent>
                                                                 {subjects.map((s) => (
-                                                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                                                    <SelectItem key={s.id} value={s.id}>{s.code || s.name}</SelectItem>
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>

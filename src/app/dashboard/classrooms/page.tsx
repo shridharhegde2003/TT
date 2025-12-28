@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Edit, Trash2, X, Save, Building, FlaskConical } from 'lucide-react'
+import { Plus, Edit, Trash2, X, Save, Building } from 'lucide-react'
 
 interface Classroom {
     id: string
     name: string
-    type: 'classroom' | 'lab'
     capacity?: number
 }
 
@@ -17,7 +16,6 @@ export default function ClassroomsPage() {
     const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
     const [name, setName] = useState('')
-    const [type, setType] = useState<'classroom' | 'lab'>('classroom')
     const [capacity, setCapacity] = useState('')
     const [loading, setLoading] = useState(false)
 
@@ -50,7 +48,10 @@ export default function ClassroomsPage() {
     const loadClassrooms = async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-            const { data } = await supabase.from('classrooms').select('*').eq('user_id', user.id).order('name')
+            const { data, error } = await supabase.from('classrooms').select('*').eq('user_id', user.id).order('name')
+            if (error) {
+                console.error('Load error:', error)
+            }
             setClassrooms(data || [])
         }
     }
@@ -66,24 +67,38 @@ export default function ClassroomsPage() {
         const { data: { user } } = await supabase.auth.getUser()
 
         if (user) {
+            const roomData = {
+                user_id: user.id,
+                name: name.trim(),
+                capacity: capacity ? parseInt(capacity) : null
+            }
+
             if (editingId) {
-                await supabase.from('classrooms').update({
-                    name,
-                    type,
+                const { error } = await supabase.from('classrooms').update({
+                    name: name.trim(),
                     capacity: capacity ? parseInt(capacity) : null
                 }).eq('id', editingId)
-                toast({ title: 'Updated', description: 'Classroom updated successfully' })
+
+                if (error) {
+                    console.error('Update error:', error)
+                    toast({ title: 'Error', description: error.message, variant: 'destructive' })
+                } else {
+                    toast({ title: 'Updated', description: 'Classroom updated successfully' })
+                    resetForm()
+                    loadClassrooms()
+                }
             } else {
-                await supabase.from('classrooms').insert({
-                    user_id: user.id,
-                    name,
-                    type,
-                    capacity: capacity ? parseInt(capacity) : null
-                })
-                toast({ title: 'Added', description: 'Classroom added successfully' })
+                const { error } = await supabase.from('classrooms').insert(roomData)
+
+                if (error) {
+                    console.error('Insert error:', error)
+                    toast({ title: 'Error', description: error.message, variant: 'destructive' })
+                } else {
+                    toast({ title: 'Added', description: 'Classroom added successfully' })
+                    resetForm()
+                    loadClassrooms()
+                }
             }
-            resetForm()
-            loadClassrooms()
         }
         setLoading(false)
     }
@@ -91,16 +106,19 @@ export default function ClassroomsPage() {
     const handleEdit = (classroom: Classroom) => {
         setEditingId(classroom.id)
         setName(classroom.name)
-        setType(classroom.type)
         setCapacity(classroom.capacity?.toString() || '')
         setShowForm(true)
     }
 
     const handleDelete = async (id: string) => {
         if (confirm('Delete this classroom?')) {
-            await supabase.from('classrooms').delete().eq('id', id)
-            toast({ title: 'Deleted', description: 'Classroom removed' })
-            loadClassrooms()
+            const { error } = await supabase.from('classrooms').delete().eq('id', id)
+            if (error) {
+                toast({ title: 'Error', description: error.message, variant: 'destructive' })
+            } else {
+                toast({ title: 'Deleted', description: 'Classroom removed' })
+                loadClassrooms()
+            }
         }
     }
 
@@ -108,7 +126,6 @@ export default function ClassroomsPage() {
         setShowForm(false)
         setEditingId(null)
         setName('')
-        setType('classroom')
         setCapacity('')
     }
 
@@ -155,27 +172,16 @@ export default function ClassroomsPage() {
                         {editingId ? 'Edit Room' : 'Add New Room'}
                     </h2>
                     <form onSubmit={handleSubmit}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '20px' }}>
                             <div>
                                 <label style={labelStyle}>Room Name *</label>
                                 <input
                                     type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder="e.g., Room 101 or Lab A"
+                                    placeholder="e.g., Room 101, Lab A, CS Lab"
                                     style={inputStyle}
                                 />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Type *</label>
-                                <select
-                                    value={type}
-                                    onChange={(e) => setType(e.target.value as 'classroom' | 'lab')}
-                                    style={inputStyle}
-                                >
-                                    <option value="classroom">Classroom</option>
-                                    <option value="lab">Lab</option>
-                                </select>
                             </div>
                             <div>
                                 <label style={labelStyle}>Capacity (Optional)</label>
@@ -253,32 +259,15 @@ export default function ClassroomsPage() {
                             borderRadius: '12px',
                             padding: '20px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                            borderLeft: `4px solid ${classroom.type === 'lab' ? '#10b981' : '#3b82f6'}`
+                            borderLeft: '4px solid #3b82f6'
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                                 <div>
                                     <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
                                         {classroom.name}
                                     </h3>
-                                    <span style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px',
-                                        padding: '2px 8px',
-                                        background: classroom.type === 'lab' ? '#d1fae5' : '#dbeafe',
-                                        color: classroom.type === 'lab' ? '#059669' : '#2563eb',
-                                        borderRadius: '4px',
-                                        fontSize: '12px',
-                                        fontWeight: '600'
-                                    }}>
-                                        {classroom.type === 'lab' ? <FlaskConical size={12} /> : <Building size={12} />}
-                                        {classroom.type === 'lab' ? 'Lab' : 'Classroom'}
-                                    </span>
                                 </div>
-                                {classroom.type === 'lab' ?
-                                    <FlaskConical size={24} color="#10b981" /> :
-                                    <Building size={24} color="#3b82f6" />
-                                }
+                                <Building size={24} color="#3b82f6" />
                             </div>
                             {classroom.capacity && (
                                 <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>

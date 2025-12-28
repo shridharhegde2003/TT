@@ -3,13 +3,12 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
-import { Plus, Edit, Trash2, X, Save, BookOpen, FlaskConical } from 'lucide-react'
+import { Plus, Edit, Trash2, X, Save, BookOpen } from 'lucide-react'
 
 interface Subject {
     id: string
     name: string
     code: string
-    type: 'theory' | 'practical'
     color: string
 }
 
@@ -24,7 +23,6 @@ export default function SubjectsPage() {
     const [editingId, setEditingId] = useState<string | null>(null)
     const [name, setName] = useState('')
     const [code, setCode] = useState('')
-    const [type, setType] = useState<'theory' | 'practical'>('theory')
     const [color, setColor] = useState(COLORS[0])
     const [loading, setLoading] = useState(false)
 
@@ -57,7 +55,10 @@ export default function SubjectsPage() {
     const loadSubjects = async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-            const { data } = await supabase.from('subjects').select('*').eq('user_id', user.id).order('name')
+            const { data, error } = await supabase.from('subjects').select('*').eq('user_id', user.id).order('name')
+            if (error) {
+                console.error('Load error:', error)
+            }
             setSubjects(data || [])
         }
     }
@@ -74,14 +75,37 @@ export default function SubjectsPage() {
 
         if (user) {
             if (editingId) {
-                await supabase.from('subjects').update({ name, code, type, color }).eq('id', editingId)
-                toast({ title: 'Updated', description: 'Subject updated successfully' })
+                const { error } = await supabase.from('subjects').update({
+                    name: name.trim(),
+                    code: code.trim(),
+                    color
+                }).eq('id', editingId)
+
+                if (error) {
+                    console.error('Update error:', error)
+                    toast({ title: 'Error', description: error.message, variant: 'destructive' })
+                } else {
+                    toast({ title: 'Updated', description: 'Subject updated successfully' })
+                    resetForm()
+                    loadSubjects()
+                }
             } else {
-                await supabase.from('subjects').insert({ user_id: user.id, name, code, type, color })
-                toast({ title: 'Added', description: 'Subject added successfully' })
+                const { error } = await supabase.from('subjects').insert({
+                    user_id: user.id,
+                    name: name.trim(),
+                    code: code.trim(),
+                    color
+                })
+
+                if (error) {
+                    console.error('Insert error:', error)
+                    toast({ title: 'Error', description: error.message, variant: 'destructive' })
+                } else {
+                    toast({ title: 'Added', description: 'Subject added successfully' })
+                    resetForm()
+                    loadSubjects()
+                }
             }
-            resetForm()
-            loadSubjects()
         }
         setLoading(false)
     }
@@ -90,16 +114,19 @@ export default function SubjectsPage() {
         setEditingId(subject.id)
         setName(subject.name)
         setCode(subject.code)
-        setType(subject.type)
-        setColor(subject.color)
+        setColor(subject.color || COLORS[0])
         setShowForm(true)
     }
 
     const handleDelete = async (id: string) => {
         if (confirm('Delete this subject?')) {
-            await supabase.from('subjects').delete().eq('id', id)
-            toast({ title: 'Deleted', description: 'Subject removed' })
-            loadSubjects()
+            const { error } = await supabase.from('subjects').delete().eq('id', id)
+            if (error) {
+                toast({ title: 'Error', description: error.message, variant: 'destructive' })
+            } else {
+                toast({ title: 'Deleted', description: 'Subject removed' })
+                loadSubjects()
+            }
         }
     }
 
@@ -108,7 +135,6 @@ export default function SubjectsPage() {
         setEditingId(null)
         setName('')
         setCode('')
-        setType('theory')
         setColor(COLORS[Math.floor(Math.random() * COLORS.length)])
     }
 
@@ -142,6 +168,19 @@ export default function SubjectsPage() {
                 </button>
             </div>
 
+            {/* Info Note */}
+            <div style={{
+                background: '#f0f9ff',
+                border: '1px solid #bae6fd',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginBottom: '24px',
+                color: '#0369a1',
+                fontSize: '14px'
+            }}>
+                <strong>Note:</strong> Theory/Practical type and number of periods are set when creating timetable entries, not here. This allows the same subject to be used for both theory and lab sessions.
+            </div>
+
             {/* Form */}
             {showForm && (
                 <div style={{
@@ -162,7 +201,7 @@ export default function SubjectsPage() {
                                     type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder="e.g., Data Structures"
+                                    placeholder="e.g., Python, DBMS, Web Technology"
                                     style={inputStyle}
                                 />
                             </div>
@@ -172,62 +211,13 @@ export default function SubjectsPage() {
                                     type="text"
                                     value={code}
                                     onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                    placeholder="e.g., CS301"
+                                    placeholder="e.g., PY, DBMS, WT"
                                     style={inputStyle}
                                 />
                             </div>
                         </div>
-                        <div style={{ marginBottom: '16px' }}>
-                            <label style={labelStyle}>Type *</label>
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setType('theory')}
-                                    style={{
-                                        flex: 1,
-                                        padding: '12px',
-                                        border: '2px solid',
-                                        borderColor: type === 'theory' ? '#4f46e5' : '#e5e7eb',
-                                        borderRadius: '8px',
-                                        background: type === 'theory' ? '#eef2ff' : 'white',
-                                        color: type === 'theory' ? '#4f46e5' : '#374151',
-                                        fontWeight: '500',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px'
-                                    }}
-                                >
-                                    <BookOpen size={18} />
-                                    Theory
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setType('practical')}
-                                    style={{
-                                        flex: 1,
-                                        padding: '12px',
-                                        border: '2px solid',
-                                        borderColor: type === 'practical' ? '#10b981' : '#e5e7eb',
-                                        borderRadius: '8px',
-                                        background: type === 'practical' ? '#d1fae5' : 'white',
-                                        color: type === 'practical' ? '#059669' : '#374151',
-                                        fontWeight: '500',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '8px'
-                                    }}
-                                >
-                                    <FlaskConical size={18} />
-                                    Practical
-                                </button>
-                            </div>
-                        </div>
                         <div style={{ marginBottom: '20px' }}>
-                            <label style={labelStyle}>Color</label>
+                            <label style={labelStyle}>Color (for timetable display)</label>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 {COLORS.map(c => (
                                     <button
@@ -311,45 +301,30 @@ export default function SubjectsPage() {
                             borderRadius: '12px',
                             padding: '20px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                            borderLeft: `4px solid ${subject.color}`
+                            borderLeft: `4px solid ${subject.color || '#3b82f6'}`
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                                 <div>
                                     <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
                                         {subject.name}
                                     </h3>
-                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        <span style={{
-                                            padding: '2px 8px',
-                                            background: '#f3f4f6',
-                                            borderRadius: '4px',
-                                            fontSize: '12px',
-                                            fontWeight: '600',
-                                            color: '#374151'
-                                        }}>
-                                            {subject.code}
-                                        </span>
-                                        <span style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            padding: '2px 8px',
-                                            background: subject.type === 'practical' ? '#d1fae5' : '#dbeafe',
-                                            color: subject.type === 'practical' ? '#059669' : '#2563eb',
-                                            borderRadius: '4px',
-                                            fontSize: '12px',
-                                            fontWeight: '500'
-                                        }}>
-                                            {subject.type === 'practical' ? <FlaskConical size={12} /> : <BookOpen size={12} />}
-                                            {subject.type === 'practical' ? 'Practical' : 'Theory'}
-                                        </span>
-                                    </div>
+                                    <span style={{
+                                        display: 'inline-block',
+                                        padding: '2px 8px',
+                                        background: '#f3f4f6',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: '600',
+                                        color: '#374151'
+                                    }}>
+                                        {subject.code}
+                                    </span>
                                 </div>
                                 <div style={{
                                     width: '24px',
                                     height: '24px',
                                     borderRadius: '6px',
-                                    background: subject.color
+                                    background: subject.color || '#3b82f6'
                                 }} />
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
