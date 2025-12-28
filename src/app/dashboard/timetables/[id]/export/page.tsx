@@ -60,6 +60,17 @@ export default function ExportTimetable() {
     const [loading, setLoading] = useState(true)
     const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
     const [isTransposed, setIsTransposed] = useState(false)
+    const [isMobile, setIsMobile] = useState(false)
+
+    // Detect mobile devices
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768)
+        }
+        checkMobile()
+        window.addEventListener('resize', checkMobile)
+        return () => window.removeEventListener('resize', checkMobile)
+    }, [])
 
     useEffect(() => {
         fetchData()
@@ -406,181 +417,203 @@ export default function ExportTimetable() {
                 </div>
             </div>
 
-            <div style={{ background: '#f3f4f6', padding: '24px', borderRadius: '12px', overflow: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Preview</h2>
+            {/* Preview Section - Hidden on Mobile */}
+            {isMobile ? (
+                <div style={{
+                    background: '#f3f4f6',
+                    padding: '32px',
+                    borderRadius: '12px',
+                    textAlign: 'center'
+                }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>📱</div>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
+                        Preview not available on mobile
+                    </h2>
+                    <p style={{ color: '#6b7280', marginBottom: '16px' }}>
+                        The timetable preview is optimized for desktop/laptop screens.<br />
+                        You can still download the PDF using the button above.
+                    </p>
+                    <p style={{ fontSize: '12px', color: '#9ca3af' }}>
+                        Open this page on a larger screen to see the preview.
+                    </p>
                 </div>
-
-                <div
-                    ref={printRef}
-                    style={{
-                        background: 'white',
-                        padding: '40px',
-                        width: orientation === 'landscape' ? '1123px' : '794px',
-                        minHeight: orientation === 'landscape' ? '794px' : '1123px',
-                        margin: '0 auto',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}
-                >
-                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                        <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>{settings?.college_name || 'College Name'}</h1>
-                        <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{timetable?.title}</h2>
-                        <p style={{ color: '#6b7280' }}>Academic Year: {timetable?.year}</p>
+            ) : (
+                <div style={{ background: '#f3f4f6', padding: '24px', borderRadius: '12px', overflow: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Preview</h2>
                     </div>
 
-                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000' }}>
-                        <thead>
-                            <tr>
-                                <th style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6' }}>
-                                    {isTransposed ? 'Day / Time' : 'Time / Day'}
-                                </th>
+                    <div
+                        ref={printRef}
+                        style={{
+                            background: 'white',
+                            padding: '40px',
+                            width: orientation === 'landscape' ? '1123px' : '794px',
+                            minHeight: orientation === 'landscape' ? '794px' : '1123px',
+                            margin: '0 auto',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                        }}
+                    >
+                        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                            <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>{settings?.college_name || 'College Name'}</h1>
+                            <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{timetable?.title}</h2>
+                            <p style={{ color: '#6b7280' }}>Academic Year: {timetable?.year}</p>
+                        </div>
+
+                        <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000' }}>
+                            <thead>
+                                <tr>
+                                    <th style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6' }}>
+                                        {isTransposed ? 'Day / Time' : 'Time / Day'}
+                                    </th>
+                                    {isTransposed ? (
+                                        timeSlots.map((time, i) => (
+                                            <th key={i} style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6', fontSize: '11px' }}>
+                                                {formatTime12(time.start)} - {formatTime12(time.end)}
+                                            </th>
+                                        ))
+                                    ) : (
+                                        workingDays.map(day => (
+                                            <th key={day} style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6' }}>{day}</th>
+                                        ))
+                                    )}
+                                </tr>
+                            </thead>
+                            <tbody>
                                 {isTransposed ? (
-                                    timeSlots.map((time, i) => (
-                                        <th key={i} style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6', fontSize: '11px' }}>
-                                            {formatTime12(time.start)} - {formatTime12(time.end)}
-                                        </th>
+                                    // Transposed View: Days as Rows, Times as Columns
+                                    workingDays.map((day, dayIndex) => (
+                                        <tr key={day}>
+                                            <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb' }}>{day}</td>
+                                            {timeSlots.map((time, i) => {
+                                                const timeStartMins = toMinutes(time.start)
+                                                if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
+
+                                                // Lunch column spans all rows
+                                                if (time.type === 'lunch') {
+                                                    if (dayIndex === 0) {
+                                                        return (
+                                                            <td
+                                                                key={i}
+                                                                rowSpan={workingDays.length}
+                                                                style={{
+                                                                    border: '1px solid #000',
+                                                                    padding: '8px',
+                                                                    background: '#fef3c7',
+                                                                    textAlign: 'center',
+                                                                    fontWeight: 'bold',
+                                                                    fontSize: '12px',
+                                                                    writingMode: 'vertical-rl',
+                                                                    textOrientation: 'mixed'
+                                                                }}
+                                                            >
+                                                                LUNCH
+                                                            </td>
+                                                        )
+                                                    }
+                                                    return null
+                                                }
+
+                                                // Break column
+                                                if (time.type === 'break') {
+                                                    if (dayIndex === 0) {
+                                                        return (
+                                                            <td
+                                                                key={i}
+                                                                rowSpan={workingDays.length}
+                                                                style={{
+                                                                    border: '1px solid #000',
+                                                                    padding: '8px',
+                                                                    background: '#dbeafe',
+                                                                    textAlign: 'center',
+                                                                    fontWeight: 'bold',
+                                                                    fontSize: '12px',
+                                                                    writingMode: 'vertical-rl',
+                                                                    textOrientation: 'mixed'
+                                                                }}
+                                                            >
+                                                                BREAK
+                                                            </td>
+                                                        )
+                                                    }
+                                                    return null
+                                                }
+
+                                                const { slot, span } = findSlotAndSpan(day, timeStartMins)
+
+                                                if (slot && span > 1) {
+                                                    for (let k = 1; k < span; k++) {
+                                                        if (timeSlots[i + k]) {
+                                                            const nextStart = toMinutes(timeSlots[i + k].start)
+                                                            occupiedCells.add(`${day}-${nextStart}`)
+                                                        }
+                                                    }
+                                                }
+
+                                                return (
+                                                    <td key={i} colSpan={span} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center', verticalAlign: 'middle', minHeight: '50px' }}>
+                                                        {renderSlotContent(slot)}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
                                     ))
                                 ) : (
-                                    workingDays.map(day => (
-                                        <th key={day} style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6' }}>{day}</th>
+                                    // Standard View: Times as Rows, Days as Columns
+                                    timeSlots.map((time, i) => (
+                                        <tr key={i}>
+                                            <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb', whiteSpace: 'nowrap', fontSize: '12px' }}>
+                                                {formatTime12(time.start)} - {formatTime12(time.end)}
+                                            </td>
+                                            {workingDays.map(day => {
+                                                const timeStartMins = toMinutes(time.start)
+                                                if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
+
+                                                // Lunch row spans all columns
+                                                if (time.type === 'lunch') {
+                                                    if (day === workingDays[0]) {
+                                                        return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold' }}>LUNCH BREAK</td>
+                                                    }
+                                                    return null
+                                                }
+
+                                                // Break row spans all columns
+                                                if (time.type === 'break') {
+                                                    if (day === workingDays[0]) {
+                                                        return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#dbeafe', textAlign: 'center', fontWeight: 'bold' }}>BREAK</td>
+                                                    }
+                                                    return null
+                                                }
+
+                                                const { slot, span } = findSlotAndSpan(day, timeStartMins)
+
+                                                if (slot && span > 1) {
+                                                    for (let k = 1; k < span; k++) {
+                                                        if (timeSlots[i + k]) {
+                                                            const nextStart = toMinutes(timeSlots[i + k].start)
+                                                            occupiedCells.add(`${day}-${nextStart}`)
+                                                        }
+                                                    }
+                                                }
+
+                                                return (
+                                                    <td key={day} rowSpan={span} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center', verticalAlign: 'middle', minWidth: '100px' }}>
+                                                        {renderSlotContent(slot)}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
                                     ))
                                 )}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {isTransposed ? (
-                                // Transposed View: Days as Rows, Times as Columns
-                                workingDays.map((day, dayIndex) => (
-                                    <tr key={day}>
-                                        <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb' }}>{day}</td>
-                                        {timeSlots.map((time, i) => {
-                                            const timeStartMins = toMinutes(time.start)
-                                            if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
+                            </tbody>
+                        </table>
 
-                                            // Lunch column spans all rows
-                                            if (time.type === 'lunch') {
-                                                if (dayIndex === 0) {
-                                                    return (
-                                                        <td
-                                                            key={i}
-                                                            rowSpan={workingDays.length}
-                                                            style={{
-                                                                border: '1px solid #000',
-                                                                padding: '8px',
-                                                                background: '#fef3c7',
-                                                                textAlign: 'center',
-                                                                fontWeight: 'bold',
-                                                                fontSize: '12px',
-                                                                writingMode: 'vertical-rl',
-                                                                textOrientation: 'mixed'
-                                                            }}
-                                                        >
-                                                            LUNCH
-                                                        </td>
-                                                    )
-                                                }
-                                                return null
-                                            }
-
-                                            // Break column
-                                            if (time.type === 'break') {
-                                                if (dayIndex === 0) {
-                                                    return (
-                                                        <td
-                                                            key={i}
-                                                            rowSpan={workingDays.length}
-                                                            style={{
-                                                                border: '1px solid #000',
-                                                                padding: '8px',
-                                                                background: '#dbeafe',
-                                                                textAlign: 'center',
-                                                                fontWeight: 'bold',
-                                                                fontSize: '12px',
-                                                                writingMode: 'vertical-rl',
-                                                                textOrientation: 'mixed'
-                                                            }}
-                                                        >
-                                                            BREAK
-                                                        </td>
-                                                    )
-                                                }
-                                                return null
-                                            }
-
-                                            const { slot, span } = findSlotAndSpan(day, timeStartMins)
-
-                                            if (slot && span > 1) {
-                                                for (let k = 1; k < span; k++) {
-                                                    if (timeSlots[i + k]) {
-                                                        const nextStart = toMinutes(timeSlots[i + k].start)
-                                                        occupiedCells.add(`${day}-${nextStart}`)
-                                                    }
-                                                }
-                                            }
-
-                                            return (
-                                                <td key={i} colSpan={span} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center', verticalAlign: 'middle', minHeight: '50px' }}>
-                                                    {renderSlotContent(slot)}
-                                                </td>
-                                            )
-                                        })}
-                                    </tr>
-                                ))
-                            ) : (
-                                // Standard View: Times as Rows, Days as Columns
-                                timeSlots.map((time, i) => (
-                                    <tr key={i}>
-                                        <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb', whiteSpace: 'nowrap', fontSize: '12px' }}>
-                                            {formatTime12(time.start)} - {formatTime12(time.end)}
-                                        </td>
-                                        {workingDays.map(day => {
-                                            const timeStartMins = toMinutes(time.start)
-                                            if (occupiedCells.has(`${day}-${timeStartMins}`)) return null
-
-                                            // Lunch row spans all columns
-                                            if (time.type === 'lunch') {
-                                                if (day === workingDays[0]) {
-                                                    return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#fef3c7', textAlign: 'center', fontWeight: 'bold' }}>LUNCH BREAK</td>
-                                                }
-                                                return null
-                                            }
-
-                                            // Break row spans all columns
-                                            if (time.type === 'break') {
-                                                if (day === workingDays[0]) {
-                                                    return <td key={day} colSpan={workingDays.length} style={{ border: '1px solid #000', padding: '8px', background: '#dbeafe', textAlign: 'center', fontWeight: 'bold' }}>BREAK</td>
-                                                }
-                                                return null
-                                            }
-
-                                            const { slot, span } = findSlotAndSpan(day, timeStartMins)
-
-                                            if (slot && span > 1) {
-                                                for (let k = 1; k < span; k++) {
-                                                    if (timeSlots[i + k]) {
-                                                        const nextStart = toMinutes(timeSlots[i + k].start)
-                                                        occupiedCells.add(`${day}-${nextStart}`)
-                                                    }
-                                                }
-                                            }
-
-                                            return (
-                                                <td key={day} rowSpan={span} style={{ border: '1px solid #000', padding: '6px', textAlign: 'center', verticalAlign: 'middle', minWidth: '100px' }}>
-                                                    {renderSlotContent(slot)}
-                                                </td>
-                                            )
-                                        })}
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-
-                    <div style={{ marginTop: '20px', fontSize: '12px', color: '#6b7280', textAlign: 'center' }}>
-                        Generated by TimeTable Pro • {new Date().toLocaleDateString()}
+                        <div style={{ marginTop: '20px', fontSize: '12px', color: '#6b7280', textAlign: 'center' }}>
+                            Generated by TimeTable Pro • {new Date().toLocaleDateString()}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }
