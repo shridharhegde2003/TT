@@ -106,7 +106,7 @@ export default function TimetableEditorPage() {
     // Add slot form
     const [showAddForm, setShowAddForm] = useState(false)
     const [selectedDay, setSelectedDay] = useState('')
-    const [slotType, setSlotType] = useState<'class' | 'break' | 'lunch'>('class')
+    const [slotType, setSlotType] = useState<'class' | 'break' | 'lunch' | 'free'>('class')
     const [selectedSubject, setSelectedSubject] = useState('')
     const [selectedLecturer, setSelectedLecturer] = useState('')
     const [selectedClassroom, setSelectedClassroom] = useState('')
@@ -293,6 +293,9 @@ export default function TimetableEditorPage() {
                 const [startH, startM] = (settings?.lunch_start_time || '12:30').split(':').map(Number)
                 const [endH, endM] = (settings?.lunch_end_time || '13:30').split(':').map(Number)
                 slotDuration = (endH * 60 + endM) - (startH * 60 + startM)
+            } else if (slotType === 'free') {
+                // Free period uses the same duration as a normal class period
+                slotDuration = (settings?.default_class_duration || 55) * numberOfPeriods
             } else {
                 slotDuration = (settings?.default_class_duration || 55) * numberOfPeriods
             }
@@ -529,6 +532,13 @@ export default function TimetableEditorPage() {
                                                     </div>
                                                 )}
 
+                                                {slot.slot_type === 'free' && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: '#f3f4f6', borderRadius: '8px' }}>
+                                                        <Clock size={18} color="#6b7280" />
+                                                        <span style={{ fontWeight: '500', color: '#4b5563' }}>Free / Gap</span>
+                                                    </div>
+                                                )}
+
                                                 {slot.slot_type === 'class' && (
                                                     <div>
                                                         {slot.is_practical ? (
@@ -613,14 +623,13 @@ export default function TimetableEditorPage() {
                             {/* Slot Type */}
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={labelStyle}>Slot Type</label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    {(['class', 'break', 'lunch'] as const).map((type) => (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    {(['class', 'free', 'break', 'lunch'] as const).map((type) => (
                                         <button
                                             key={type}
                                             onClick={() => setSlotType(type)}
                                             style={{
                                                 ...buttonStyle,
-                                                flex: 1,
                                                 background: slotType === type ? '#4f46e5' : '#f3f4f6',
                                                 color: slotType === type ? 'white' : '#374151',
                                                 display: 'flex',
@@ -630,13 +639,40 @@ export default function TimetableEditorPage() {
                                             }}
                                         >
                                             {type === 'class' && <BookOpen size={14} />}
+                                            {type === 'free' && <Clock size={14} />}
                                             {type === 'break' && <Coffee size={14} />}
                                             {type === 'lunch' && <UtensilsCrossed size={14} />}
-                                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                                            {type === 'free' ? 'Free/Gap' : type.charAt(0).toUpperCase() + type.slice(1)}
                                         </button>
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Free periods - show number of periods selector */}
+                            {slotType === 'free' && (
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={labelStyle}>Number of Free Periods</label>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        {[1, 2, 3].map(num => (
+                                            <button
+                                                key={num}
+                                                onClick={() => setNumberOfPeriods(num)}
+                                                style={{
+                                                    ...buttonStyle,
+                                                    width: '40px',
+                                                    background: numberOfPeriods === num ? '#4f46e5' : '#f3f4f6',
+                                                    color: numberOfPeriods === num ? 'white' : '#374151'
+                                                }}
+                                            >
+                                                {num}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                                        Duration: {(settings?.default_class_duration || 55) * numberOfPeriods} mins
+                                    </p>
+                                </div>
+                            )}
 
                             {slotType === 'class' && (
                                 <>
