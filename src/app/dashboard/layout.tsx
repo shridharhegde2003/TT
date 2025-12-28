@@ -88,29 +88,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     })}
                 </nav>
 
-                {/* Logout */}
-                <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb' }}>
-                    <button
-                        onClick={handleLogout}
-                        style={{
-                            width: '100%',
-                            padding: '12px',
-                            background: '#fee2e2',
-                            color: '#dc2626',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontWeight: '500',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px'
-                        }}
-                    >
-                        <LogOut size={18} />
-                        Logout
-                    </button>
-                </div>
             </aside>
 
             {/* Main Content */}
@@ -152,6 +129,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         }}>
                             <User size={20} />
                         </div>
+                        <button
+                            onClick={handleLogout}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '500',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '14px'
+                            }}
+                        >
+                            <LogOut size={16} />
+                            Logout
+                        </button>
                     </div>
                 </header>
 
