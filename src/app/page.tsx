@@ -74,8 +74,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white dark:bg-gray-950 overflow-x-hidden">
       {/* Navigation */}
       <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
-          ? 'bg-white/80 dark:bg-gray-950/80 backdrop-blur-lg shadow-lg'
-          : 'bg-transparent'
+        ? 'bg-white/80 dark:bg-gray-950/80 backdrop-blur-lg shadow-lg'
+        : 'bg-transparent'
         }`}>
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -87,12 +87,12 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center space-x-4">
               <ThemeToggle />
-              <Link href="/auth">
-                <Button className="btn-gradient">
+              <Button asChild className="btn-gradient">
+                <Link href="/auth">
                   Get Started
                   <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -127,17 +127,17 @@ export default function LandingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/auth">
-                <Button size="lg" className="btn-gradient text-lg px-8 py-6">
+              <Button asChild size="lg" className="btn-gradient text-lg px-8 py-6">
+                <Link href="/auth">
                   Start Creating Free
                   <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </Link>
-              <Link href="#features">
-                <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-2">
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="text-lg px-8 py-6 border-2">
+                <Link href="#features">
                   Learn More
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
 
             {/* Quick stats */}
@@ -257,15 +257,16 @@ export default function LandingPage() {
               Join educators who trust TimeTable Pro for their scheduling needs.
               It's free, fast, and incredibly easy to use.
             </p>
-            <Link href="/auth">
-              <Button
-                size="lg"
-                className="bg-white text-purple-700 hover:bg-gray-100 text-lg px-10 py-6 font-semibold shadow-xl"
-              >
+            <Button
+              asChild
+              size="lg"
+              className="bg-white text-purple-700 hover:bg-gray-100 text-lg px-10 py-6 font-semibold shadow-xl"
+            >
+              <Link href="/auth">
                 Get Started Now
                 <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
       </section>

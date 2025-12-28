@@ -217,10 +217,10 @@ export default function AuthPage() {
     return (
         <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
             {/* Background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-purple-950" />
-            <div className="absolute inset-0 hero-gradient dot-pattern" />
-            <div className="absolute top-20 left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl" />
-            <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl" />
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-purple-950 -z-10 pointer-events-none" />
+            <div className="absolute inset-0 hero-gradient dot-pattern -z-10 pointer-events-none" />
+            <div className="absolute top-20 left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl -z-10 pointer-events-none" />
+            <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl -z-10 pointer-events-none" />
 
             <div className="relative z-10 w-full max-w-md px-6">
                 {/* Logo */}
