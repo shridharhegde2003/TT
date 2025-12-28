@@ -4,18 +4,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import {
     Plus,
     Trash2,
-    Loader2,
     ArrowLeft,
-    AlertTriangle,
     CheckCircle2,
     Download,
     Clock,
@@ -26,26 +19,71 @@ import {
     X,
     Users
 } from 'lucide-react'
-import type {
-    Timetable,
-    TimetableSlot,
-    CollegeSettings,
-    Lecturer,
-    Classroom,
-    Subject,
-    LabBatch
-} from '@/lib/types'
+
+interface Timetable {
+    id: string
+    title: string
+    class_name: string
+    semester: string
+    section: string
+    year: string
+    status: string
+}
+
+interface TimetableSlot {
+    id: string
+    timetable_id: string
+    day_of_week: string
+    start_time: string
+    end_time: string
+    slot_type: string
+    subject_id: string | null
+    lecturer_id: string | null
+    classroom_id: string | null
+    is_practical: boolean
+    slot_order: number
+}
+
+interface CollegeSettings {
+    college_start_time: string
+    college_end_time: string
+    default_class_duration: number
+    lunch_start_time: string
+    lunch_end_time: string
+    working_days: string[]
+}
+
+interface Lecturer {
+    id: string
+    full_name: string
+    short_name: string
+}
+
+interface Classroom {
+    id: string
+    name: string
+}
+
+interface Subject {
+    id: string
+    name: string
+    code: string
+}
+
+interface LabBatch {
+    id: string
+    batch_name: string
+    subject_id: string | null
+    lecturer_id: string | null
+    subject?: Subject
+    lecturer?: Lecturer
+}
 
 interface SlotWithDetails extends TimetableSlot {
     subject?: Subject
     lecturer?: Lecturer
     classroom?: Classroom
-    lab_batches?: LabBatchWithDetails[]
-}
-
-interface LabBatchWithDetails extends LabBatch {
-    subject?: Subject
-    lecturer?: Lecturer
+    lab_batches?: LabBatch[]
 }
 
 export default function TimetableEditorPage() {
@@ -74,7 +112,35 @@ export default function TimetableEditorPage() {
     const [isPractical, setIsPractical] = useState(false)
     const [numberOfPeriods, setNumberOfPeriods] = useState(1)
     const [labBatches, setLabBatches] = useState<{ batch_name: string, subject_id: string, lecturer_id: string }[]>([])
-    const [conflictWarning, setConflictWarning] = useState<string | null>(null)
+
+    // Styles
+    const selectStyle = {
+        width: '100%',
+        padding: '10px 12px',
+        fontSize: '14px',
+        border: '2px solid #e5e7eb',
+        borderRadius: '8px',
+        outline: 'none',
+        background: 'white',
+        cursor: 'pointer'
+    }
+
+    const labelStyle = {
+        display: 'block',
+        marginBottom: '6px',
+        fontWeight: '600' as const,
+        color: '#374151',
+        fontSize: '13px'
+    }
+
+    const buttonStyle = {
+        padding: '8px 16px',
+        border: 'none',
+        borderRadius: '6px',
+        fontWeight: '500' as const,
+        cursor: 'pointer',
+        fontSize: '14px'
+    }
 
     // Fetch all data
     useEffect(() => {
@@ -89,7 +155,6 @@ export default function TimetableEditorPage() {
                 return
             }
 
-            // Fetch all data in parallel
             const [
                 { data: timetableData },
                 { data: slotsData },
@@ -123,7 +188,6 @@ export default function TimetableEditorPage() {
                     .select('*, subject:subjects(*), lecturer:lecturers(*)')
                     .in('timetable_slot_id', practicalSlots.map(s => s.id))
 
-                // Attach batches to slots
                 const slotsWithBatches = (slotsData || []).map(slot => ({
                     ...slot,
                     lab_batches: (batchesData || []).filter(b => b.timetable_slot_id === slot.id)
@@ -168,7 +232,6 @@ export default function TimetableEditorPage() {
             return { start: '09:00', end: addMinutes('09:00', duration), order: 1 }
         }
 
-        // Check if we need to skip lunch break
         const lunchStart = settings.lunch_start_time
         const lunchEnd = settings.lunch_end_time
         const lastEndTime = lastSlot.end_time
@@ -196,72 +259,25 @@ export default function TimetableEditorPage() {
         return `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`
     }
 
-    // Check for lecturer conflicts
-    const checkLecturerConflict = async (lecturerId: string, day: string, startTime: string, endTime: string) => {
-        if (!lecturerId) return null
-
-        const conflictInCurrent = slots.find(s =>
-            s.day_of_week === day &&
-            s.lecturer_id === lecturerId &&
-            ((startTime >= s.start_time && startTime < s.end_time) ||
-                (endTime > s.start_time && endTime <= s.end_time))
-        )
-
-        if (conflictInCurrent) {
-            return `Already assigned at ${conflictInCurrent.start_time}`
-        }
-
-        const { data: otherSlots } = await supabase
-            .from('timetable_slots')
-            .select('*, timetable:timetables(class_name, semester, section)')
-            .eq('lecturer_id', lecturerId)
-            .eq('day_of_week', day)
-            .neq('timetable_id', id)
-
-        for (const slot of otherSlots || []) {
-            if ((startTime >= slot.start_time && startTime < slot.end_time) ||
-                (endTime > slot.start_time && endTime <= slot.end_time)) {
-                const tt = slot.timetable as any
-                return `Conflict: ${tt.class_name} Sem ${tt.semester}`
-            }
-        }
-
-        return null
-    }
-
-    // Handle lecturer selection with conflict check
-    const handleLecturerSelect = async (lecturerId: string) => {
-        setSelectedLecturer(lecturerId)
-
-        if (!lecturerId || !selectedDay) {
-            setConflictWarning(null)
-            return
-        }
-
-        const nextSlot = getNextTimeSlot(selectedDay, numberOfPeriods)
-        const conflict = await checkLecturerConflict(lecturerId, selectedDay, nextSlot.start, nextSlot.end)
-        setConflictWarning(conflict)
-    }
-
     // Add slot
     const handleAddSlot = async () => {
         if (!selectedDay) {
-            toast({ title: 'Select Day', description: 'Please select a day', variant: 'destructive' })
+            toast({ title: 'Error', description: 'Please select a day', variant: 'destructive' })
             return
         }
 
         if (slotType === 'class' && !selectedClassroom) {
-            toast({ title: 'Missing Fields', description: 'Please select a classroom/lab', variant: 'destructive' })
+            toast({ title: 'Error', description: 'Please select a classroom', variant: 'destructive' })
             return
         }
 
         if (slotType === 'class' && !isPractical && (!selectedSubject || !selectedLecturer)) {
-            toast({ title: 'Missing Fields', description: 'Please select subject and lecturer', variant: 'destructive' })
+            toast({ title: 'Error', description: 'Please select subject and lecturer', variant: 'destructive' })
             return
         }
 
         if (isPractical && labBatches.length === 0) {
-            toast({ title: 'Add Batches', description: 'Please add at least one batch', variant: 'destructive' })
+            toast({ title: 'Error', description: 'Please add at least one batch', variant: 'destructive' })
             return
         }
 
@@ -288,7 +304,7 @@ export default function TimetableEditorPage() {
             const { data: newSlot, error } = await supabase
                 .from('timetable_slots')
                 .insert([slotData])
-                .select('*, subject:subjects(*), lecturer:lecturers(*), classroom:classrooms(*)')
+                .select()
                 .single()
 
             if (error) throw error
@@ -306,17 +322,7 @@ export default function TimetableEditorPage() {
             }
 
             toast({ title: 'Added', description: 'Slot added successfully' })
-
-            // Reset form
-            setSelectedSubject('')
-            setSelectedLecturer('')
-            setSelectedClassroom('')
-            setIsPractical(false)
-            setNumberOfPeriods(1)
-            setLabBatches([])
-            setConflictWarning(null)
-            setShowAddForm(false)
-
+            resetForm()
             fetchData()
         } catch (error) {
             console.error('Error adding slot:', error)
@@ -326,22 +332,25 @@ export default function TimetableEditorPage() {
         }
     }
 
+    const resetForm = () => {
+        setSelectedSubject('')
+        setSelectedLecturer('')
+        setSelectedClassroom('')
+        setIsPractical(false)
+        setNumberOfPeriods(1)
+        setLabBatches([])
+        setShowAddForm(false)
+    }
+
     // Delete slot
     const handleDeleteSlot = async (slotId: string) => {
         if (!confirm('Delete this slot?')) return
 
         try {
-            const { error } = await supabase
-                .from('timetable_slots')
-                .delete()
-                .eq('id', slotId)
-
-            if (error) throw error
-
+            await supabase.from('timetable_slots').delete().eq('id', slotId)
             toast({ title: 'Deleted', description: 'Slot removed' })
             fetchData()
         } catch (error) {
-            console.error('Error deleting slot:', error)
             toast({ title: 'Error', description: 'Failed to delete', variant: 'destructive' })
         }
     }
@@ -349,17 +358,10 @@ export default function TimetableEditorPage() {
     // Mark as done
     const handleMarkAsDone = async () => {
         try {
-            const { error } = await supabase
-                .from('timetables')
-                .update({ status: 'done' })
-                .eq('id', id)
-
-            if (error) throw error
-
+            await supabase.from('timetables').update({ status: 'done' }).eq('id', id)
             toast({ title: 'Completed!', description: 'Timetable marked as done' })
             router.push(`/dashboard/timetables/${id}/export`)
         } catch (error) {
-            console.error('Error:', error)
             toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' })
         }
     }
@@ -379,34 +381,22 @@ export default function TimetableEditorPage() {
         setLabBatches(labBatches.filter((_, i) => i !== index))
     }
 
-    // Format batch display
-    const formatBatchDisplay = (slot: SlotWithDetails) => {
-        if (!slot.lab_batches || slot.lab_batches.length === 0) return null
-
-        const subjects = slot.lab_batches.map((b, i) => {
-            const subj = b.subject
-            return subj?.code || subj?.name?.substring(0, 3).toUpperCase() || `Sub${i + 1}`
-        }).join(', ')
-
-        const lecturers = slot.lab_batches.map(b => b.lecturer?.short_name || '').filter(Boolean).join(', ')
-
-        return { subjects, lecturers }
-    }
-
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px' }}>
+                <p style={{ color: '#6b7280' }}>Loading...</p>
             </div>
         )
     }
 
     if (!timetable || !settings) {
         return (
-            <div className="text-center py-12">
+            <div style={{ textAlign: 'center', padding: '48px' }}>
                 <p>Timetable not found</p>
                 <Link href="/dashboard/timetables">
-                    <Button className="mt-4">Back to Timetables</Button>
+                    <button style={{ ...buttonStyle, background: '#4f46e5', color: 'white', marginTop: '16px' }}>
+                        Back to Timetables
+                    </button>
                 </Link>
             </div>
         )
@@ -415,415 +405,405 @@ export default function TimetableEditorPage() {
     const workingDays = settings.working_days || []
 
     return (
-        <div className="space-y-6">
+        <div>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <Link href="/dashboard/timetables">
-                        <Button variant="ghost" size="icon">
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
+                        <button style={{ ...buttonStyle, background: '#f3f4f6', display: 'flex', alignItems: 'center' }}>
+                            <ArrowLeft size={18} />
+                        </button>
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-bold">
+                        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827', marginBottom: '4px' }}>
                             {timetable.class_name} - Sem {timetable.semester}
                             {timetable.section && ` (Section ${timetable.section})`}
                         </h1>
-                        <p className="text-gray-600 dark:text-gray-400">{timetable.year}</p>
+                        <p style={{ color: '#6b7280', fontSize: '14px' }}>{timetable.year}</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => router.push(`/dashboard/timetables/${id}/export`)}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Export PDF
-                    </Button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                        onClick={() => router.push(`/dashboard/timetables/${id}/export`)}
+                        style={{ ...buttonStyle, background: '#f3f4f6', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <Download size={16} />
+                        Export
+                    </button>
                     {timetable.status !== 'done' && (
-                        <Button onClick={handleMarkAsDone} className="btn-gradient">
-                            <CheckCircle2 className="w-4 h-4 mr-2" />
-                            Mark as Done
-                        </Button>
+                        <button
+                            onClick={handleMarkAsDone}
+                            style={{ ...buttonStyle, background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                            <CheckCircle2 size={16} />
+                            Mark Done
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Status Badge */}
-            <div className="flex items-center gap-2">
-                <span className={timetable.status === 'done' ? 'badge-done' : 'badge-progress'}>
-                    {timetable.status === 'done' ? 'Completed' : 'In Progress'}
-                </span>
-                <span className="text-sm text-gray-500">
-                    {slots.length} slots added
-                </span>
-            </div>
-
             {/* Day Tabs */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
                 {workingDays.map((day: string) => {
                     const daySlotCount = slots.filter(s => s.day_of_week === day).length
                     return (
-                        <Button
+                        <button
                             key={day}
-                            variant={selectedDay === day ? 'default' : 'outline'}
                             onClick={() => setSelectedDay(day)}
-                            className={`flex-shrink-0 ${selectedDay === day ? 'btn-gradient' : ''}`}
+                            style={{
+                                ...buttonStyle,
+                                background: selectedDay === day ? '#4f46e5' : '#f3f4f6',
+                                color: selectedDay === day ? 'white' : '#374151'
+                            }}
                         >
-                            {day}
-                            {daySlotCount > 0 && (
-                                <span className="ml-2 px-1.5 py-0.5 text-xs rounded-full bg-white/20">
-                                    {daySlotCount}
-                                </span>
-                            )}
-                        </Button>
+                            {day} {daySlotCount > 0 && `(${daySlotCount})`}
+                        </button>
                     )
                 })}
             </div>
 
-            {/* Day Content */}
+            {/* Main Content */}
             {selectedDay && (
-                <div className="grid lg:grid-cols-3 gap-6">
+                <div style={{ display: 'grid', gridTemplateColumns: showAddForm ? '1fr 350px' : '1fr', gap: '24px' }}>
                     {/* Slots List */}
-                    <div className="lg:col-span-2 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-xl font-semibold">{selectedDay}</h2>
-                            <Button onClick={() => setShowAddForm(true)} size="sm">
-                                <Plus className="w-4 h-4 mr-2" />
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h2 style={{ fontSize: '20px', fontWeight: '600' }}>{selectedDay}</h2>
+                            <button
+                                onClick={() => setShowAddForm(true)}
+                                style={{ ...buttonStyle, background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            >
+                                <Plus size={16} />
                                 Add Slot
-                            </Button>
+                            </button>
                         </div>
 
                         {slots.filter(s => s.day_of_week === selectedDay).length > 0 ? (
-                            <div className="space-y-3">
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 {slots
                                     .filter(s => s.day_of_week === selectedDay)
                                     .sort((a, b) => a.slot_order - b.slot_order)
-                                    .map((slot) => {
-                                        const batchDisplay = formatBatchDisplay(slot)
-                                        return (
-                                            <Card key={slot.id} className="premium-card">
-                                                <CardContent className="py-4">
-                                                    <div className="flex items-start justify-between">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="text-center min-w-[80px]">
-                                                                <p className="text-sm font-medium text-gray-500">
-                                                                    {slot.start_time}
-                                                                </p>
-                                                                <p className="text-xs text-gray-400">to</p>
-                                                                <p className="text-sm font-medium text-gray-500">
-                                                                    {slot.end_time}
-                                                                </p>
-                                                            </div>
+                                    .map((slot) => (
+                                        <div key={slot.id} style={{
+                                            background: 'white',
+                                            borderRadius: '12px',
+                                            padding: '16px',
+                                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                <div style={{ textAlign: 'center', minWidth: '70px' }}>
+                                                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>{slot.start_time}</p>
+                                                    <p style={{ fontSize: '12px', color: '#9ca3af' }}>to</p>
+                                                    <p style={{ fontSize: '14px', fontWeight: '500', color: '#374151' }}>{slot.end_time}</p>
+                                                </div>
 
-                                                            {slot.slot_type === 'lunch' && (
-                                                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                                                                    <UtensilsCrossed className="w-5 h-5 text-orange-600" />
-                                                                    <span className="font-medium text-orange-700 dark:text-orange-300">Lunch Break</span>
-                                                                </div>
-                                                            )}
-
-                                                            {slot.slot_type === 'break' && (
-                                                                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                                                                    <Coffee className="w-5 h-5 text-blue-600" />
-                                                                    <span className="font-medium text-blue-700 dark:text-blue-300">Break</span>
-                                                                </div>
-                                                            )}
-
-                                                            {slot.slot_type === 'class' && (
-                                                                <div className="flex-1">
-                                                                    {slot.is_practical && batchDisplay ? (
-                                                                        // Practical/Lab with batches display
-                                                                        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                                                                            <div className="flex items-center gap-2 mb-2">
-                                                                                <FlaskConical className="w-5 h-5 text-green-600" />
-                                                                                <span className="font-semibold text-green-700 dark:text-green-300">
-                                                                                    {batchDisplay.subjects}
-                                                                                </span>
-                                                                            </div>
-                                                                            <p className="text-sm text-green-600 dark:text-green-400 mb-1">
-                                                                                {slot.classroom?.name}
-                                                                            </p>
-                                                                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                                                ({batchDisplay.lecturers})
-                                                                            </p>
-                                                                            <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
-                                                                                <Users className="w-3 h-3" />
-                                                                                {slot.lab_batches?.length} batch(es)
-                                                                            </div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        // Theory class display
-                                                                        <div className="flex items-center gap-2">
-                                                                            <div
-                                                                                className="w-8 h-8 rounded-lg flex items-center justify-center"
-                                                                                style={{ backgroundColor: slot.subject?.color || '#3B82F6' }}
-                                                                            >
-                                                                                <BookOpen className="w-4 h-4 text-white" />
-                                                                            </div>
-                                                                            <div>
-                                                                                <p className="font-semibold">{slot.subject?.name}</p>
-                                                                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                                                    {slot.lecturer?.short_name} • {slot.classroom?.name}
-                                                                                </p>
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleDeleteSlot(slot.id)}
-                                                            className="text-gray-400 hover:text-red-600"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </Button>
+                                                {slot.slot_type === 'lunch' && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: '#fef3c7', borderRadius: '8px' }}>
+                                                        <UtensilsCrossed size={18} color="#d97706" />
+                                                        <span style={{ fontWeight: '500', color: '#92400e' }}>Lunch Break</span>
                                                     </div>
-                                                </CardContent>
-                                            </Card>
-                                        )
-                                    })}
+                                                )}
+
+                                                {slot.slot_type === 'break' && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: '#dbeafe', borderRadius: '8px' }}>
+                                                        <Coffee size={18} color="#2563eb" />
+                                                        <span style={{ fontWeight: '500', color: '#1e40af' }}>Break</span>
+                                                    </div>
+                                                )}
+
+                                                {slot.slot_type === 'class' && (
+                                                    <div>
+                                                        {slot.is_practical ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <FlaskConical size={20} color="#10b981" />
+                                                                <div>
+                                                                    <p style={{ fontWeight: '600', color: '#111827' }}>
+                                                                        {slot.lab_batches?.map(b => b.subject?.code || b.subject?.name).join(', ') || 'Lab'}
+                                                                    </p>
+                                                                    <p style={{ fontSize: '13px', color: '#6b7280' }}>
+                                                                        {slot.classroom?.name} • ({slot.lab_batches?.map(b => b.lecturer?.short_name).join(', ')})
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <BookOpen size={20} color="#4f46e5" />
+                                                                <div>
+                                                                    <p style={{ fontWeight: '600', color: '#111827' }}>{slot.subject?.name}</p>
+                                                                    <p style={{ fontSize: '13px', color: '#6b7280' }}>
+                                                                        {slot.lecturer?.short_name} • {slot.classroom?.name}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <button
+                                                onClick={() => handleDeleteSlot(slot.id)}
+                                                style={{ ...buttonStyle, background: '#fee2e2', color: '#dc2626', padding: '8px' }}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
                             </div>
                         ) : (
-                            <Card className="premium-card">
-                                <CardContent className="py-12 text-center">
-                                    <Clock className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                                    <p className="text-gray-500">No slots added for {selectedDay}</p>
-                                    <Button onClick={() => setShowAddForm(true)} className="mt-4 btn-gradient">
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Add First Slot
-                                    </Button>
-                                </CardContent>
-                            </Card>
+                            <div style={{
+                                background: 'white',
+                                borderRadius: '12px',
+                                padding: '48px',
+                                textAlign: 'center',
+                                color: '#6b7280'
+                            }}>
+                                <Clock size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+                                <p>No slots added for {selectedDay}</p>
+                                <button
+                                    onClick={() => setShowAddForm(true)}
+                                    style={{ ...buttonStyle, background: '#4f46e5', color: 'white', marginTop: '16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    <Plus size={16} />
+                                    Add First Slot
+                                </button>
+                            </div>
                         )}
                     </div>
 
-                    {/* Add Slot Form */}
+                    {/* Add Slot Form - Using simple inline styles */}
                     {showAddForm && (
-                        <Card className="lg:sticky lg:top-4 h-fit premium-card border-purple-200 dark:border-purple-800">
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="text-lg">Add Slot</CardTitle>
-                                    <Button variant="ghost" size="icon" onClick={() => setShowAddForm(false)}>
-                                        <X className="w-4 h-4" />
-                                    </Button>
+                        <div style={{
+                            background: 'white',
+                            borderRadius: '12px',
+                            padding: '20px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                            height: 'fit-content',
+                            position: 'sticky',
+                            top: '20px'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <h3 style={{ fontSize: '18px', fontWeight: '600' }}>Add Slot</h3>
+                                <button onClick={() => setShowAddForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                    <X size={20} color="#6b7280" />
+                                </button>
+                            </div>
+
+                            <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+                                Next: {getNextTimeSlot(selectedDay, numberOfPeriods).start} - {getNextTimeSlot(selectedDay, numberOfPeriods).end}
+                            </p>
+
+                            {/* Slot Type */}
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={labelStyle}>Slot Type</label>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    {(['class', 'break', 'lunch'] as const).map((type) => (
+                                        <button
+                                            key={type}
+                                            onClick={() => setSlotType(type)}
+                                            style={{
+                                                ...buttonStyle,
+                                                flex: 1,
+                                                background: slotType === type ? '#4f46e5' : '#f3f4f6',
+                                                color: slotType === type ? 'white' : '#374151',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '4px'
+                                            }}
+                                        >
+                                            {type === 'class' && <BookOpen size={14} />}
+                                            {type === 'break' && <Coffee size={14} />}
+                                            {type === 'lunch' && <UtensilsCrossed size={14} />}
+                                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                                        </button>
+                                    ))}
                                 </div>
-                                <p className="text-sm text-gray-500">
-                                    Next: {getNextTimeSlot(selectedDay, numberOfPeriods).start} - {getNextTimeSlot(selectedDay, numberOfPeriods).end}
-                                </p>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* Slot Type */}
-                                <div className="space-y-2">
-                                    <Label>Slot Type</Label>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {(['class', 'break', 'lunch'] as const).map((type) => (
-                                            <Button
-                                                key={type}
-                                                variant={slotType === type ? 'default' : 'outline'}
-                                                size="sm"
-                                                onClick={() => setSlotType(type)}
-                                                className={slotType === type ? 'btn-gradient' : ''}
-                                            >
-                                                {type === 'class' && <BookOpen className="w-4 h-4 mr-1" />}
-                                                {type === 'break' && <Coffee className="w-4 h-4 mr-1" />}
-                                                {type === 'lunch' && <UtensilsCrossed className="w-4 h-4 mr-1" />}
-                                                {type.charAt(0).toUpperCase() + type.slice(1)}
-                                            </Button>
-                                        ))}
+                            </div>
+
+                            {slotType === 'class' && (
+                                <>
+                                    {/* Class Type */}
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={labelStyle}>Class Type</label>
+                                        <div style={{ display: 'flex', gap: '16px' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="radio"
+                                                    checked={!isPractical}
+                                                    onChange={() => { setIsPractical(false); setLabBatches([]); setNumberOfPeriods(1); }}
+                                                />
+                                                Theory
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="radio"
+                                                    checked={isPractical}
+                                                    onChange={() => { setIsPractical(true); setNumberOfPeriods(2); }}
+                                                />
+                                                Practical/Lab
+                                            </label>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {slotType === 'class' && (
-                                    <>
-                                        {/* Class Type */}
-                                        <div className="space-y-2">
-                                            <Label>Class Type</Label>
-                                            <div className="flex gap-4">
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="radio"
-                                                        checked={!isPractical}
-                                                        onChange={() => { setIsPractical(false); setLabBatches([]); setNumberOfPeriods(1); }}
-                                                    />
-                                                    <BookOpen className="w-4 h-4" />
-                                                    <span>Theory</span>
-                                                </label>
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="radio"
-                                                        checked={isPractical}
-                                                        onChange={() => { setIsPractical(true); setNumberOfPeriods(2); }}
-                                                    />
-                                                    <FlaskConical className="w-4 h-4" />
-                                                    <span>Practical/Lab</span>
-                                                </label>
-                                            </div>
+                                    {/* Number of Periods */}
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={labelStyle}>Number of Periods</label>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            {[1, 2, 3].map(num => (
+                                                <button
+                                                    key={num}
+                                                    onClick={() => setNumberOfPeriods(num)}
+                                                    style={{
+                                                        ...buttonStyle,
+                                                        width: '40px',
+                                                        background: numberOfPeriods === num ? '#4f46e5' : '#f3f4f6',
+                                                        color: numberOfPeriods === num ? 'white' : '#374151'
+                                                    }}
+                                                >
+                                                    {num}
+                                                </button>
+                                            ))}
                                         </div>
+                                        <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                                            Duration: {(settings?.default_class_duration || 55) * numberOfPeriods} mins
+                                        </p>
+                                    </div>
 
-                                        {/* Number of Periods */}
-                                        <div className="space-y-2">
-                                            <Label>Number of Periods</Label>
-                                            <div className="flex gap-2">
-                                                {[1, 2, 3].map(num => (
-                                                    <Button
-                                                        key={num}
-                                                        variant={numberOfPeriods === num ? 'default' : 'outline'}
-                                                        size="sm"
-                                                        onClick={() => setNumberOfPeriods(num)}
-                                                        className={numberOfPeriods === num ? 'btn-gradient' : ''}
-                                                    >
-                                                        {num}
-                                                    </Button>
-                                                ))}
-                                            </div>
-                                            <p className="text-xs text-gray-500">
-                                                Duration: {(settings?.default_class_duration || 55) * numberOfPeriods} mins
-                                            </p>
-                                        </div>
+                                    {/* Classroom */}
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={labelStyle}>Classroom/Lab *</label>
+                                        <select
+                                            value={selectedClassroom}
+                                            onChange={(e) => setSelectedClassroom(e.target.value)}
+                                            style={selectStyle}
+                                        >
+                                            <option value="">Select room</option>
+                                            {classrooms.map(room => (
+                                                <option key={room.id} value={room.id}>{room.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                                        {/* Classroom */}
-                                        <div className="space-y-2">
-                                            <Label>Classroom/Lab</Label>
-                                            <Select value={selectedClassroom} onValueChange={setSelectedClassroom}>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select room" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {classrooms.map((room) => (
-                                                        <SelectItem key={room.id} value={room.id}>
-                                                            {room.name}
-                                                        </SelectItem>
+                                    {/* Theory: Subject & Lecturer */}
+                                    {!isPractical && (
+                                        <>
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <label style={labelStyle}>Subject *</label>
+                                                <select
+                                                    value={selectedSubject}
+                                                    onChange={(e) => setSelectedSubject(e.target.value)}
+                                                    style={selectStyle}
+                                                >
+                                                    <option value="">Select subject</option>
+                                                    {subjects.map(subj => (
+                                                        <option key={subj.id} value={subj.id}>
+                                                            {subj.name} ({subj.code})
+                                                        </option>
                                                     ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        {/* Theory: Subject & Lecturer */}
-                                        {!isPractical && (
-                                            <>
-                                                <div className="space-y-2">
-                                                    <Label>Subject</Label>
-                                                    <Select value={selectedSubject} onValueChange={setSelectedSubject}>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select subject" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {subjects.map((subj) => (
-                                                                <SelectItem key={subj.id} value={subj.id}>
-                                                                    {subj.name} {subj.code && `(${subj.code})`}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label>Lecturer</Label>
-                                                    <Select value={selectedLecturer} onValueChange={handleLecturerSelect}>
-                                                        <SelectTrigger>
-                                                            <SelectValue placeholder="Select lecturer" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {lecturers.map((lec) => (
-                                                                <SelectItem key={lec.id} value={lec.id}>
-                                                                    {lec.full_name} ({lec.short_name})
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </>
-                                        )}
-
-                                        {/* Practical: Lab Batches */}
-                                        {isPractical && (
-                                            <div className="space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <Label>Batches ({labBatches.length})</Label>
-                                                    <Button size="sm" variant="outline" onClick={addLabBatch}>
-                                                        <Plus className="w-3 h-3 mr-1" />
-                                                        Add
-                                                    </Button>
-                                                </div>
-
-                                                {labBatches.length === 0 && (
-                                                    <p className="text-sm text-gray-500 text-center py-4">
-                                                        Add batches for this practical session
-                                                    </p>
-                                                )}
-
-                                                {labBatches.map((batch, index) => (
-                                                    <div key={index} className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 space-y-2">
-                                                        <div className="flex items-center justify-between">
-                                                            <Input
-                                                                value={batch.batch_name}
-                                                                onChange={(e) => updateLabBatch(index, 'batch_name', e.target.value)}
-                                                                placeholder="Batch name"
-                                                                className="w-20"
-                                                            />
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() => removeLabBatch(index)}
-                                                            >
-                                                                <X className="w-4 h-4" />
-                                                            </Button>
-                                                        </div>
-                                                        <Select
-                                                            value={batch.subject_id}
-                                                            onValueChange={(v) => updateLabBatch(index, 'subject_id', v)}
-                                                        >
-                                                            <SelectTrigger className="text-sm">
-                                                                <SelectValue placeholder="Subject" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {subjects.map((s) => (
-                                                                    <SelectItem key={s.id} value={s.id}>{s.code || s.name}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <Select
-                                                            value={batch.lecturer_id}
-                                                            onValueChange={(v) => updateLabBatch(index, 'lecturer_id', v)}
-                                                        >
-                                                            <SelectTrigger className="text-sm">
-                                                                <SelectValue placeholder="Lecturer" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {lecturers.map((l) => (
-                                                                    <SelectItem key={l.id} value={l.id}>{l.short_name}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                ))}
+                                                </select>
                                             </div>
-                                        )}
 
-                                        {/* Conflict Warning */}
-                                        {conflictWarning && (
-                                            <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300">
-                                                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                                                <span className="text-sm">{conflictWarning}</span>
+                                            <div style={{ marginBottom: '16px' }}>
+                                                <label style={labelStyle}>Lecturer *</label>
+                                                <select
+                                                    value={selectedLecturer}
+                                                    onChange={(e) => setSelectedLecturer(e.target.value)}
+                                                    style={selectStyle}
+                                                >
+                                                    <option value="">Select lecturer</option>
+                                                    {lecturers.map(lec => (
+                                                        <option key={lec.id} value={lec.id}>
+                                                            {lec.full_name} ({lec.short_name})
+                                                        </option>
+                                                    ))}
+                                                </select>
                                             </div>
-                                        )}
-                                    </>
-                                )}
-
-                                <Button
-                                    onClick={handleAddSlot}
-                                    disabled={saving}
-                                    className="w-full btn-gradient"
-                                >
-                                    {saving ? (
-                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    ) : (
-                                        <Plus className="w-4 h-4 mr-2" />
+                                        </>
                                     )}
-                                    Add Slot
-                                </Button>
-                            </CardContent>
-                        </Card>
+
+                                    {/* Practical: Lab Batches */}
+                                    {isPractical && (
+                                        <div style={{ marginBottom: '16px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                <label style={labelStyle}>Batches ({labBatches.length})</label>
+                                                <button
+                                                    onClick={addLabBatch}
+                                                    style={{ ...buttonStyle, background: '#f3f4f6', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                >
+                                                    <Plus size={12} />
+                                                    Add
+                                                </button>
+                                            </div>
+
+                                            {labBatches.length === 0 && (
+                                                <p style={{ fontSize: '13px', color: '#6b7280', textAlign: 'center', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+                                                    Add batches for this practical
+                                                </p>
+                                            )}
+
+                                            {labBatches.map((batch, index) => (
+                                                <div key={index} style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px', marginBottom: '8px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                        <input
+                                                            type="text"
+                                                            value={batch.batch_name}
+                                                            onChange={(e) => updateLabBatch(index, 'batch_name', e.target.value)}
+                                                            style={{ ...selectStyle, width: '80px' }}
+                                                        />
+                                                        <button onClick={() => removeLabBatch(index)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                                                            <X size={16} color="#dc2626" />
+                                                        </button>
+                                                    </div>
+                                                    <select
+                                                        value={batch.subject_id}
+                                                        onChange={(e) => updateLabBatch(index, 'subject_id', e.target.value)}
+                                                        style={{ ...selectStyle, marginBottom: '8px', fontSize: '13px' }}
+                                                    >
+                                                        <option value="">Select subject</option>
+                                                        {subjects.map(s => (
+                                                            <option key={s.id} value={s.id}>{s.code || s.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={batch.lecturer_id}
+                                                        onChange={(e) => updateLabBatch(index, 'lecturer_id', e.target.value)}
+                                                        style={{ ...selectStyle, fontSize: '13px' }}
+                                                    >
+                                                        <option value="">Select lecturer</option>
+                                                        {lecturers.map(l => (
+                                                            <option key={l.id} value={l.id}>{l.short_name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Add Button */}
+                            <button
+                                onClick={handleAddSlot}
+                                disabled={saving}
+                                style={{
+                                    ...buttonStyle,
+                                    width: '100%',
+                                    background: saving ? '#9ca3af' : '#4f46e5',
+                                    color: 'white',
+                                    padding: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <Plus size={16} />
+                                {saving ? 'Adding...' : 'Add Slot'}
+                            </button>
+                        </div>
                     )}
                 </div>
             )}
