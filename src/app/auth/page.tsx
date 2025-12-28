@@ -11,10 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Calendar, ArrowLeft, Loader2, Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-type AuthMode = 'initial' | 'login' | 'signup'
-
 export default function AuthPage() {
-    const [mode, setMode] = useState<AuthMode>('initial')
+    const [mode, setMode] = useState<'initial' | 'login' | 'signup'>('initial')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [fullName, setFullName] = useState('')
@@ -33,7 +31,7 @@ export default function AuthPage() {
             }
         }
         checkUser()
-    }, [router, supabase.auth])
+    }, [])
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -54,20 +52,13 @@ export default function AuthPage() {
             })
 
             if (error) {
-                // Check if it's because user doesn't exist
-                if (error.message.includes('Invalid login credentials')) {
-                    toast({
-                        title: 'Login Failed',
-                        description: 'Invalid email or password. If you are new, click "Create Account" instead.',
-                        variant: 'destructive'
-                    })
-                } else {
-                    toast({
-                        title: 'Login Failed',
-                        description: error.message,
-                        variant: 'destructive'
-                    })
-                }
+                toast({
+                    title: 'Login Failed',
+                    description: error.message.includes('Invalid login credentials')
+                        ? 'Invalid email or password. If you are new, click "Create Account".'
+                        : error.message,
+                    variant: 'destructive'
+                })
             } else if (data.user) {
                 toast({
                     title: 'Welcome Back!',
@@ -126,8 +117,7 @@ export default function AuthPage() {
                 options: {
                     data: {
                         full_name: fullName
-                    },
-                    emailRedirectTo: `${window.location.origin}/auth/callback`
+                    }
                 }
             })
 
@@ -139,30 +129,23 @@ export default function AuthPage() {
                 })
             } else if (data.user) {
                 // Create user profile
-                const { error: profileError } = await supabase.from('user_profiles').insert([{
+                await supabase.from('user_profiles').insert([{
                     user_id: data.user.id,
                     full_name: fullName,
                     email: email,
                     is_onboarded: false
                 }])
 
-                if (profileError) {
-                    console.error('Profile creation error:', profileError)
-                }
-
-                // Check if email confirmation is required
                 if (data.session) {
-                    // No email confirmation required, proceed to onboarding
                     toast({
                         title: 'Account Created!',
                         description: 'Welcome to TimeTable Pro',
                     })
                     router.push('/onboarding')
                 } else {
-                    // Email confirmation required
                     toast({
                         title: 'Check Your Email',
-                        description: 'We sent you a confirmation link. Please check your email.',
+                        description: 'We sent you a confirmation link.',
                     })
                     setMode('login')
                 }
@@ -178,18 +161,19 @@ export default function AuthPage() {
         }
     }
 
-    const switchToLogin = () => {
+    // Button click handlers
+    const onSignInClick = () => {
         setMode('login')
         setPassword('')
         setFullName('')
     }
 
-    const switchToSignup = () => {
+    const onCreateAccountClick = () => {
         setMode('signup')
         setPassword('')
     }
 
-    const goBack = () => {
+    const onBackClick = () => {
         setMode('initial')
         setEmail('')
         setPassword('')
@@ -234,19 +218,20 @@ export default function AuthPage() {
                         {/* Initial Choice */}
                         {mode === 'initial' && (
                             <div className="space-y-4">
-                                <Button
-                                    onClick={switchToLogin}
-                                    className="w-full h-12 btn-gradient"
+                                <button
+                                    type="button"
+                                    onClick={onSignInClick}
+                                    className="w-full h-12 rounded-lg font-medium text-white btn-gradient flex items-center justify-center"
                                 >
                                     Sign In
-                                </Button>
-                                <Button
-                                    onClick={switchToSignup}
-                                    variant="outline"
-                                    className="w-full h-12"
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onCreateAccountClick}
+                                    className="w-full h-12 rounded-lg font-medium border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
                                 >
                                     Create New Account
-                                </Button>
+                                </button>
                             </div>
                         )}
 
@@ -254,27 +239,26 @@ export default function AuthPage() {
                         {mode === 'login' && (
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
+                                    <Label htmlFor="login-email">Email Address</Label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                                         <Input
-                                            id="email"
+                                            id="login-email"
                                             type="email"
                                             placeholder="you@example.com"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
                                             className="pl-10 h-12"
                                             required
-                                            autoFocus
                                         />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
+                                    <Label htmlFor="login-password">Password</Label>
                                     <div className="relative">
                                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                                         <Input
-                                            id="password"
+                                            id="login-password"
                                             type={showPassword ? 'text' : 'password'}
                                             placeholder="Enter your password"
                                             value={password}
@@ -291,10 +275,10 @@ export default function AuthPage() {
                                         </button>
                                     </div>
                                 </div>
-                                <Button
+                                <button
                                     type="submit"
-                                    className="w-full h-12 btn-gradient"
                                     disabled={loading}
+                                    className="w-full h-12 rounded-lg font-medium text-white btn-gradient flex items-center justify-center disabled:opacity-50"
                                 >
                                     {loading ? (
                                         <>
@@ -304,25 +288,23 @@ export default function AuthPage() {
                                     ) : (
                                         'Sign In'
                                     )}
-                                </Button>
+                                </button>
                                 <div className="flex gap-2">
-                                    <Button
+                                    <button
                                         type="button"
-                                        variant="ghost"
-                                        className="flex-1"
-                                        onClick={goBack}
+                                        onClick={onBackClick}
+                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
                                     >
-                                        <ArrowLeft className="w-4 h-4 mr-2" />
+                                        <ArrowLeft className="w-4 h-4 mr-1" />
                                         Back
-                                    </Button>
-                                    <Button
+                                    </button>
+                                    <button
                                         type="button"
-                                        variant="ghost"
-                                        className="flex-1"
-                                        onClick={switchToSignup}
+                                        onClick={onCreateAccountClick}
+                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
                                     >
                                         Create Account
-                                    </Button>
+                                    </button>
                                 </div>
                             </form>
                         )}
@@ -331,27 +313,26 @@ export default function AuthPage() {
                         {mode === 'signup' && (
                             <form onSubmit={handleSignUp} className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="fullName">Full Name</Label>
+                                    <Label htmlFor="signup-name">Full Name</Label>
                                     <div className="relative">
                                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                                         <Input
-                                            id="fullName"
+                                            id="signup-name"
                                             type="text"
                                             placeholder="Enter your full name"
                                             value={fullName}
                                             onChange={(e) => setFullName(e.target.value)}
                                             className="pl-10 h-12"
                                             required
-                                            autoFocus
                                         />
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="email">Email Address</Label>
+                                    <Label htmlFor="signup-email">Email Address</Label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                                         <Input
-                                            id="email"
+                                            id="signup-email"
                                             type="email"
                                             placeholder="you@example.com"
                                             value={email}
@@ -362,11 +343,11 @@ export default function AuthPage() {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
+                                    <Label htmlFor="signup-password">Password</Label>
                                     <div className="relative">
                                         <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                                         <Input
-                                            id="password"
+                                            id="signup-password"
                                             type={showPassword ? 'text' : 'password'}
                                             placeholder="Create a password (min 6 characters)"
                                             value={password}
@@ -383,10 +364,10 @@ export default function AuthPage() {
                                         </button>
                                     </div>
                                 </div>
-                                <Button
+                                <button
                                     type="submit"
-                                    className="w-full h-12 btn-gradient"
                                     disabled={loading}
+                                    className="w-full h-12 rounded-lg font-medium text-white btn-gradient flex items-center justify-center disabled:opacity-50"
                                 >
                                     {loading ? (
                                         <>
@@ -396,25 +377,23 @@ export default function AuthPage() {
                                     ) : (
                                         'Create Account'
                                     )}
-                                </Button>
+                                </button>
                                 <div className="flex gap-2">
-                                    <Button
+                                    <button
                                         type="button"
-                                        variant="ghost"
-                                        className="flex-1"
-                                        onClick={goBack}
+                                        onClick={onBackClick}
+                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
                                     >
-                                        <ArrowLeft className="w-4 h-4 mr-2" />
+                                        <ArrowLeft className="w-4 h-4 mr-1" />
                                         Back
-                                    </Button>
-                                    <Button
+                                    </button>
+                                    <button
                                         type="button"
-                                        variant="ghost"
-                                        className="flex-1"
-                                        onClick={switchToLogin}
+                                        onClick={onSignInClick}
+                                        className="flex-1 h-10 rounded-lg text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center transition-colors"
                                     >
                                         Sign In Instead
-                                    </Button>
+                                    </button>
                                 </div>
                             </form>
                         )}
