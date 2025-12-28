@@ -2,376 +2,364 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
-import {
-    Plus,
-    Trash2,
-    Save,
-    BookOpen,
-    Loader2,
-    Edit2,
-    X,
-    Search,
-    Beaker
-} from 'lucide-react'
-import type { Subject } from '@/lib/types'
-import { SUBJECT_COLORS } from '@/lib/types'
+
+interface Subject {
+    id: string
+    name: string
+    code: string
+    type: 'theory' | 'practical'
+    color: string
+}
+
+const COLORS = [
+    '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+]
 
 export default function SubjectsPage() {
     const [subjects, setSubjects] = useState<Subject[]>([])
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [showAddForm, setShowAddForm] = useState(false)
+    const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
-
-    // Form state
     const [name, setName] = useState('')
     const [code, setCode] = useState('')
-    const [isPractical, setIsPractical] = useState(false)
-    const [color, setColor] = useState(SUBJECT_COLORS[0])
+    const [type, setType] = useState<'theory' | 'practical'>('theory')
+    const [color, setColor] = useState(COLORS[0])
+    const [loading, setLoading] = useState(false)
 
     const supabase = createClient()
     const { toast } = useToast()
 
+    const inputStyle = {
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: '16px',
+        border: '2px solid #e5e7eb',
+        borderRadius: '8px',
+        outline: 'none',
+        boxSizing: 'border-box' as const,
+        background: 'white'
+    }
+
+    const labelStyle = {
+        display: 'block',
+        marginBottom: '6px',
+        fontWeight: '600' as const,
+        color: '#374151',
+        fontSize: '14px'
+    }
+
     useEffect(() => {
-        fetchSubjects()
+        loadSubjects()
     }, [])
 
-    const fetchSubjects = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const { data, error } = await supabase
-                .from('subjects')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('name', { ascending: true })
-
-            if (error) throw error
+    const loadSubjects = async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+            const { data } = await supabase.from('subjects').select('*').eq('user_id', user.id).order('name')
             setSubjects(data || [])
-        } catch (error) {
-            console.error('Error fetching subjects:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to load subjects',
-                variant: 'destructive'
-            })
-        } finally {
-            setLoading(false)
+        }
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!name.trim() || !code.trim()) {
+            toast({ title: 'Error', description: 'Name and code are required', variant: 'destructive' })
+            return
+        }
+
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user) {
+            if (editingId) {
+                await supabase.from('subjects').update({ name, code, type, color }).eq('id', editingId)
+                toast({ title: 'Updated', description: 'Subject updated successfully' })
+            } else {
+                await supabase.from('subjects').insert({ user_id: user.id, name, code, type, color })
+                toast({ title: 'Added', description: 'Subject added successfully' })
+            }
+            resetForm()
+            loadSubjects()
+        }
+        setLoading(false)
+    }
+
+    const handleEdit = (subject: Subject) => {
+        setEditingId(subject.id)
+        setName(subject.name)
+        setCode(subject.code)
+        setType(subject.type)
+        setColor(subject.color)
+        setShowForm(true)
+    }
+
+    const handleDelete = async (id: string) => {
+        if (confirm('Delete this subject?')) {
+            await supabase.from('subjects').delete().eq('id', id)
+            toast({ title: 'Deleted', description: 'Subject removed' })
+            loadSubjects()
         }
     }
 
     const resetForm = () => {
+        setShowForm(false)
+        setEditingId(null)
         setName('')
         setCode('')
-        setIsPractical(false)
-        const randomIndex = Math.floor(Math.random() * SUBJECT_COLORS.length)
-        setColor(SUBJECT_COLORS[randomIndex])
-        setEditingId(null)
-        setShowAddForm(false)
-    }
-
-    const handleSave = async () => {
-        if (!name.trim()) {
-            toast({
-                title: 'Name Required',
-                description: 'Please enter the subject name',
-                variant: 'destructive'
-            })
-            return
-        }
-
-        setSaving(true)
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const subjectData = {
-                user_id: user.id,
-                name: name.trim(),
-                code: code.trim() || null,
-                is_practical: isPractical,
-                color: color
-            }
-
-            if (editingId) {
-                const { error } = await supabase
-                    .from('subjects')
-                    .update(subjectData)
-                    .eq('id', editingId)
-
-                if (error) throw error
-                toast({ title: 'Success', description: 'Subject updated successfully' })
-            } else {
-                const { error } = await supabase
-                    .from('subjects')
-                    .insert([subjectData])
-
-                if (error) throw error
-                toast({ title: 'Success', description: 'Subject added successfully' })
-            }
-
-            resetForm()
-            fetchSubjects()
-        } catch (error) {
-            console.error('Error saving subject:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to save subject',
-                variant: 'destructive'
-            })
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const handleEdit = (subject: Subject) => {
-        setName(subject.name)
-        setCode(subject.code || '')
-        setIsPractical(subject.is_practical)
-        setColor(subject.color)
-        setEditingId(subject.id)
-        setShowAddForm(true)
-    }
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this subject?')) return
-
-        try {
-            const { error } = await supabase
-                .from('subjects')
-                .delete()
-                .eq('id', id)
-
-            if (error) throw error
-
-            toast({ title: 'Deleted', description: 'Subject removed successfully' })
-            fetchSubjects()
-        } catch (error) {
-            console.error('Error deleting subject:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to delete subject',
-                variant: 'destructive'
-            })
-        }
-    }
-
-    const filteredSubjects = subjects.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.code?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        )
+        setType('theory')
+        setColor(COLORS[Math.floor(Math.random() * COLORS.length)])
     }
 
     return (
-        <div className="space-y-6">
+        <div>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h1 className="text-3xl font-bold">Subjects</h1>
-                    <p className="text-gray-600 dark:text-gray-400">
-                        Manage courses and subjects
-                    </p>
+                    <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '4px' }}>
+                        Subjects
+                    </h1>
+                    <p style={{ color: '#6b7280' }}>{subjects.length} subject(s) added</p>
                 </div>
-                <Button
-                    onClick={() => { resetForm(); setShowAddForm(true); }}
-                    className="btn-gradient"
+                <button
+                    onClick={() => { resetForm(); setShowForm(true) }}
+                    style={{
+                        padding: '12px 24px',
+                        background: '#4f46e5',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                    }}
                 >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Subject
-                </Button>
+                    + Add Subject
+                </button>
             </div>
 
-            {/* Add/Edit Form */}
-            {showAddForm && (
-                <Card className="premium-card border-green-200 dark:border-green-800">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle>{editingId ? 'Edit Subject' : 'Add New Subject'}</CardTitle>
-                            <Button variant="ghost" size="icon" onClick={resetForm}>
-                                <X className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Subject Name *</Label>
-                                <Input
-                                    id="name"
-                                    placeholder="e.g., Data Structures"
+            {/* Form */}
+            {showForm && (
+                <div style={{
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    marginBottom: '24px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
+                        {editingId ? 'Edit Subject' : 'Add New Subject'}
+                    </h2>
+                    <form onSubmit={handleSubmit}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                            <div>
+                                <label style={labelStyle}>Subject Name *</label>
+                                <input
+                                    type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g., Data Structures"
+                                    style={inputStyle}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="code">Subject Code (optional)</Label>
-                                <Input
-                                    id="code"
-                                    placeholder="e.g., CS301"
+                            <div>
+                                <label style={labelStyle}>Subject Code *</label>
+                                <input
+                                    type="text"
                                     value={code}
-                                    onChange={(e) => setCode(e.target.value)}
+                                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                                    placeholder="e.g., CS301"
+                                    style={inputStyle}
                                 />
                             </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <div className="space-y-2">
-                                <Label>Type</Label>
-                                <div className="flex gap-4">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            checked={!isPractical}
-                                            onChange={() => setIsPractical(false)}
-                                            className="text-purple-600"
-                                        />
-                                        <span>Theory</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            checked={isPractical}
-                                            onChange={() => setIsPractical(true)}
-                                            className="text-purple-600"
-                                        />
-                                        <span>Practical/Lab</span>
-                                    </label>
-                                </div>
-                            </div>
-                            <div className="space-y-2 flex-1">
-                                <Label>Color</Label>
-                                <div className="flex gap-2 flex-wrap">
-                                    {SUBJECT_COLORS.map((c) => (
-                                        <button
-                                            key={c}
-                                            type="button"
-                                            onClick={() => setColor(c)}
-                                            className={`w-8 h-8 rounded-lg transition-transform ${color === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : ''
-                                                }`}
-                                            style={{ backgroundColor: c }}
-                                        />
-                                    ))}
-                                </div>
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>Type *</label>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setType('theory')}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        border: '2px solid',
+                                        borderColor: type === 'theory' ? '#4f46e5' : '#e5e7eb',
+                                        borderRadius: '8px',
+                                        background: type === 'theory' ? '#eef2ff' : 'white',
+                                        color: type === 'theory' ? '#4f46e5' : '#374151',
+                                        fontWeight: '500',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    📚 Theory
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setType('practical')}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        border: '2px solid',
+                                        borderColor: type === 'practical' ? '#10b981' : '#e5e7eb',
+                                        borderRadius: '8px',
+                                        background: type === 'practical' ? '#d1fae5' : 'white',
+                                        color: type === 'practical' ? '#059669' : '#374151',
+                                        fontWeight: '500',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    🔬 Practical
+                                </button>
                             </div>
                         </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={resetForm}>
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={labelStyle}>Color</label>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {COLORS.map(c => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        onClick={() => setColor(c)}
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            borderRadius: '8px',
+                                            background: c,
+                                            border: color === c ? '3px solid #111827' : '3px solid transparent',
+                                            cursor: 'pointer'
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: loading ? '#9ca3af' : '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: '600',
+                                    cursor: loading ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {loading ? 'Saving...' : editingId ? 'Update' : 'Add Subject'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={resetForm}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: '#f3f4f6',
+                                    color: '#374151',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: '500',
+                                    cursor: 'pointer'
+                                }}
+                            >
                                 Cancel
-                            </Button>
-                            <Button onClick={handleSave} disabled={saving} className="btn-gradient">
-                                {saving ? (
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                ) : (
-                                    <Save className="w-4 h-4 mr-2" />
-                                )}
-                                {editingId ? 'Update' : 'Save'}
-                            </Button>
+                            </button>
                         </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Search */}
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                    placeholder="Search subjects..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                />
-            </div>
-
-            {/* Subjects List */}
-            {filteredSubjects.length > 0 ? (
-                <div className="grid gap-4">
-                    {filteredSubjects.map((subject) => (
-                        <Card key={subject.id} className="premium-card">
-                            <CardContent className="flex items-center justify-between py-4">
-                                <div className="flex items-center gap-4">
-                                    <div
-                                        className="w-12 h-12 rounded-xl flex items-center justify-center"
-                                        style={{ backgroundColor: subject.color }}
-                                    >
-                                        {subject.is_practical ? (
-                                            <Beaker className="w-6 h-6 text-white" />
-                                        ) : (
-                                            <BookOpen className="w-6 h-6 text-white" />
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="font-semibold">{subject.name}</h3>
-                                            {subject.is_practical && (
-                                                <span className="px-2 py-0.5 text-xs rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                                                    Practical
-                                                </span>
-                                            )}
-                                        </div>
-                                        {subject.code && (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                {subject.code}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleEdit(subject)}
-                                        className="text-gray-500 hover:text-blue-600"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDelete(subject.id)}
-                                        className="text-gray-500 hover:text-red-600"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                    </form>
                 </div>
-            ) : (
-                <Card className="premium-card">
-                    <CardContent className="py-12 text-center">
-                        <BookOpen className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                        <h3 className="font-semibold text-gray-500 dark:text-gray-400 mb-2">
-                            {searchQuery ? 'No Subjects Found' : 'No Subjects Added'}
-                        </h3>
-                        <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-                            {searchQuery
-                                ? 'Try a different search term'
-                                : 'Add your first subject to get started'
-                            }
-                        </p>
-                        {!searchQuery && (
-                            <Button onClick={() => setShowAddForm(true)} className="btn-gradient">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Add Subject
-                            </Button>
-                        )}
-                    </CardContent>
-                </Card>
             )}
+
+            {/* List */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                {subjects.length === 0 ? (
+                    <div style={{
+                        gridColumn: '1 / -1',
+                        background: 'white',
+                        borderRadius: '12px',
+                        padding: '48px',
+                        textAlign: 'center',
+                        color: '#6b7280'
+                    }}>
+                        <p style={{ fontSize: '48px', marginBottom: '16px' }}>📚</p>
+                        <p>No subjects added yet. Click "Add Subject" to get started.</p>
+                    </div>
+                ) : (
+                    subjects.map(subject => (
+                        <div key={subject.id} style={{
+                            background: 'white',
+                            borderRadius: '12px',
+                            padding: '20px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                            borderLeft: `4px solid ${subject.color}`
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                <div>
+                                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
+                                        {subject.name}
+                                    </h3>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span style={{
+                                            padding: '2px 8px',
+                                            background: '#f3f4f6',
+                                            borderRadius: '4px',
+                                            fontSize: '12px',
+                                            fontWeight: '600',
+                                            color: '#374151'
+                                        }}>
+                                            {subject.code}
+                                        </span>
+                                        <span style={{
+                                            padding: '2px 8px',
+                                            background: subject.type === 'practical' ? '#d1fae5' : '#dbeafe',
+                                            color: subject.type === 'practical' ? '#059669' : '#2563eb',
+                                            borderRadius: '4px',
+                                            fontSize: '12px',
+                                            fontWeight: '500'
+                                        }}>
+                                            {subject.type === 'practical' ? '🔬 Practical' : '📚 Theory'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    borderRadius: '6px',
+                                    background: subject.color
+                                }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => handleEdit(subject)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px',
+                                        background: '#f3f4f6',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    ✏️ Edit
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(subject.id)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px',
+                                        background: '#fee2e2',
+                                        color: '#dc2626',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
     )
 }

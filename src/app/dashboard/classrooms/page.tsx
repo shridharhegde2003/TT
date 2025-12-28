@@ -2,311 +2,305 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
-import {
-    Plus,
-    Trash2,
-    Save,
-    Building2,
-    Loader2,
-    Edit2,
-    X,
-    Search
-} from 'lucide-react'
-import type { Classroom } from '@/lib/types'
+
+interface Classroom {
+    id: string
+    name: string
+    type: 'classroom' | 'lab'
+    capacity?: number
+}
 
 export default function ClassroomsPage() {
     const [classrooms, setClassrooms] = useState<Classroom[]>([])
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [showAddForm, setShowAddForm] = useState(false)
+    const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
-
-    // Form state
     const [name, setName] = useState('')
-    const [capacity, setCapacity] = useState<number | ''>('')
+    const [type, setType] = useState<'classroom' | 'lab'>('classroom')
+    const [capacity, setCapacity] = useState('')
+    const [loading, setLoading] = useState(false)
 
     const supabase = createClient()
     const { toast } = useToast()
 
+    const inputStyle = {
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: '16px',
+        border: '2px solid #e5e7eb',
+        borderRadius: '8px',
+        outline: 'none',
+        boxSizing: 'border-box' as const,
+        background: 'white'
+    }
+
+    const labelStyle = {
+        display: 'block',
+        marginBottom: '6px',
+        fontWeight: '600' as const,
+        color: '#374151',
+        fontSize: '14px'
+    }
+
     useEffect(() => {
-        fetchClassrooms()
+        loadClassrooms()
     }, [])
 
-    const fetchClassrooms = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const { data, error } = await supabase
-                .from('classrooms')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('name', { ascending: true })
-
-            if (error) throw error
+    const loadClassrooms = async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+            const { data } = await supabase.from('classrooms').select('*').eq('user_id', user.id).order('name')
             setClassrooms(data || [])
-        } catch (error) {
-            console.error('Error fetching classrooms:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to load classrooms',
-                variant: 'destructive'
-            })
-        } finally {
-            setLoading(false)
+        }
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!name.trim()) {
+            toast({ title: 'Error', description: 'Name is required', variant: 'destructive' })
+            return
+        }
+
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user) {
+            if (editingId) {
+                await supabase.from('classrooms').update({
+                    name,
+                    type,
+                    capacity: capacity ? parseInt(capacity) : null
+                }).eq('id', editingId)
+                toast({ title: 'Updated', description: 'Classroom updated successfully' })
+            } else {
+                await supabase.from('classrooms').insert({
+                    user_id: user.id,
+                    name,
+                    type,
+                    capacity: capacity ? parseInt(capacity) : null
+                })
+                toast({ title: 'Added', description: 'Classroom added successfully' })
+            }
+            resetForm()
+            loadClassrooms()
+        }
+        setLoading(false)
+    }
+
+    const handleEdit = (classroom: Classroom) => {
+        setEditingId(classroom.id)
+        setName(classroom.name)
+        setType(classroom.type)
+        setCapacity(classroom.capacity?.toString() || '')
+        setShowForm(true)
+    }
+
+    const handleDelete = async (id: string) => {
+        if (confirm('Delete this classroom?')) {
+            await supabase.from('classrooms').delete().eq('id', id)
+            toast({ title: 'Deleted', description: 'Classroom removed' })
+            loadClassrooms()
         }
     }
 
     const resetForm = () => {
-        setName('')
-        setCapacity('')
+        setShowForm(false)
         setEditingId(null)
-        setShowAddForm(false)
-    }
-
-    const handleSave = async () => {
-        if (!name.trim()) {
-            toast({
-                title: 'Name Required',
-                description: 'Please enter the classroom/lab name',
-                variant: 'destructive'
-            })
-            return
-        }
-
-        setSaving(true)
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const classroomData = {
-                user_id: user.id,
-                name: name.trim(),
-                capacity: capacity || null
-            }
-
-            if (editingId) {
-                const { error } = await supabase
-                    .from('classrooms')
-                    .update(classroomData)
-                    .eq('id', editingId)
-
-                if (error) throw error
-                toast({ title: 'Success', description: 'Classroom updated successfully' })
-            } else {
-                const { error } = await supabase
-                    .from('classrooms')
-                    .insert([classroomData])
-
-                if (error) throw error
-                toast({ title: 'Success', description: 'Classroom added successfully' })
-            }
-
-            resetForm()
-            fetchClassrooms()
-        } catch (error) {
-            console.error('Error saving classroom:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to save classroom',
-                variant: 'destructive'
-            })
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const handleEdit = (classroom: Classroom) => {
-        setName(classroom.name)
-        setCapacity(classroom.capacity || '')
-        setEditingId(classroom.id)
-        setShowAddForm(true)
-    }
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this classroom?')) return
-
-        try {
-            const { error } = await supabase
-                .from('classrooms')
-                .delete()
-                .eq('id', id)
-
-            if (error) throw error
-
-            toast({ title: 'Deleted', description: 'Classroom removed successfully' })
-            fetchClassrooms()
-        } catch (error) {
-            console.error('Error deleting classroom:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to delete classroom',
-                variant: 'destructive'
-            })
-        }
-    }
-
-    const filteredClassrooms = classrooms.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        )
+        setName('')
+        setType('classroom')
+        setCapacity('')
     }
 
     return (
-        <div className="space-y-6">
+        <div>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h1 className="text-3xl font-bold">Classrooms & Labs</h1>
-                    <p className="text-gray-600 dark:text-gray-400">
-                        Manage all rooms and laboratories
-                    </p>
+                    <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '4px' }}>
+                        Classrooms & Labs
+                    </h1>
+                    <p style={{ color: '#6b7280' }}>{classrooms.length} room(s) added</p>
                 </div>
-                <Button
-                    onClick={() => { resetForm(); setShowAddForm(true); }}
-                    className="btn-gradient"
+                <button
+                    onClick={() => { resetForm(); setShowForm(true) }}
+                    style={{
+                        padding: '12px 24px',
+                        background: '#4f46e5',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                    }}
                 >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Classroom
-                </Button>
+                    + Add Room
+                </button>
             </div>
 
-            {/* Add/Edit Form */}
-            {showAddForm && (
-                <Card className="premium-card border-orange-200 dark:border-orange-800">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle>{editingId ? 'Edit Classroom' : 'Add New Classroom'}</CardTitle>
-                            <Button variant="ghost" size="icon" onClick={resetForm}>
-                                <X className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Room/Lab Name *</Label>
-                                <Input
-                                    id="name"
-                                    placeholder="e.g., Room 101, Lab A, Seminar Hall"
+            {/* Form */}
+            {showForm && (
+                <div style={{
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    marginBottom: '24px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
+                        {editingId ? 'Edit Room' : 'Add New Room'}
+                    </h2>
+                    <form onSubmit={handleSubmit}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                            <div>
+                                <label style={labelStyle}>Room Name *</label>
+                                <input
+                                    type="text"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g., Room 101 or Lab A"
+                                    style={inputStyle}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="capacity">Capacity (optional)</Label>
-                                <Input
-                                    id="capacity"
+                            <div>
+                                <label style={labelStyle}>Type *</label>
+                                <select
+                                    value={type}
+                                    onChange={(e) => setType(e.target.value as 'classroom' | 'lab')}
+                                    style={inputStyle}
+                                >
+                                    <option value="classroom">Classroom</option>
+                                    <option value="lab">Lab</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style={labelStyle}>Capacity (Optional)</label>
+                                <input
                                     type="number"
-                                    placeholder="e.g., 60"
                                     value={capacity}
-                                    onChange={(e) => setCapacity(e.target.value ? parseInt(e.target.value) : '')}
+                                    onChange={(e) => setCapacity(e.target.value)}
+                                    placeholder="60"
+                                    style={inputStyle}
                                 />
                             </div>
                         </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={resetForm}>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: loading ? '#9ca3af' : '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: '600',
+                                    cursor: loading ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {loading ? 'Saving...' : editingId ? 'Update' : 'Add Room'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={resetForm}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: '#f3f4f6',
+                                    color: '#374151',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: '500',
+                                    cursor: 'pointer'
+                                }}
+                            >
                                 Cancel
-                            </Button>
-                            <Button onClick={handleSave} disabled={saving} className="btn-gradient">
-                                {saving ? (
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                ) : (
-                                    <Save className="w-4 h-4 mr-2" />
-                                )}
-                                {editingId ? 'Update' : 'Save'}
-                            </Button>
+                            </button>
                         </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Search */}
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                    placeholder="Search classrooms..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                />
-            </div>
-
-            {/* Classrooms List */}
-            {filteredClassrooms.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredClassrooms.map((classroom) => (
-                        <Card key={classroom.id} className="premium-card">
-                            <CardContent className="flex items-center justify-between py-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-600 to-red-600 flex items-center justify-center">
-                                        <Building2 className="w-6 h-6 text-white" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold">{classroom.name}</h3>
-                                        {classroom.capacity && (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                Capacity: {classroom.capacity}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleEdit(classroom)}
-                                        className="text-gray-500 hover:text-blue-600"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDelete(classroom.id)}
-                                        className="text-gray-500 hover:text-red-600"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                    </form>
                 </div>
-            ) : (
-                <Card className="premium-card">
-                    <CardContent className="py-12 text-center">
-                        <Building2 className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                        <h3 className="font-semibold text-gray-500 dark:text-gray-400 mb-2">
-                            {searchQuery ? 'No Classrooms Found' : 'No Classrooms Added'}
-                        </h3>
-                        <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-                            {searchQuery
-                                ? 'Try a different search term'
-                                : 'Add your first classroom or lab'
-                            }
-                        </p>
-                        {!searchQuery && (
-                            <Button onClick={() => setShowAddForm(true)} className="btn-gradient">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Add Classroom
-                            </Button>
-                        )}
-                    </CardContent>
-                </Card>
             )}
+
+            {/* List */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '16px' }}>
+                {classrooms.length === 0 ? (
+                    <div style={{
+                        gridColumn: '1 / -1',
+                        background: 'white',
+                        borderRadius: '12px',
+                        padding: '48px',
+                        textAlign: 'center',
+                        color: '#6b7280'
+                    }}>
+                        <p style={{ fontSize: '48px', marginBottom: '16px' }}>🏫</p>
+                        <p>No rooms added yet. Click "Add Room" to get started.</p>
+                    </div>
+                ) : (
+                    classrooms.map(classroom => (
+                        <div key={classroom.id} style={{
+                            background: 'white',
+                            borderRadius: '12px',
+                            padding: '20px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                            borderLeft: `4px solid ${classroom.type === 'lab' ? '#10b981' : '#3b82f6'}`
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                <div>
+                                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', marginBottom: '4px' }}>
+                                        {classroom.name}
+                                    </h3>
+                                    <span style={{
+                                        display: 'inline-block',
+                                        padding: '2px 8px',
+                                        background: classroom.type === 'lab' ? '#d1fae5' : '#dbeafe',
+                                        color: classroom.type === 'lab' ? '#059669' : '#2563eb',
+                                        borderRadius: '4px',
+                                        fontSize: '12px',
+                                        fontWeight: '600'
+                                    }}>
+                                        {classroom.type === 'lab' ? '🔬 Lab' : '📚 Classroom'}
+                                    </span>
+                                </div>
+                                <span style={{ fontSize: '24px' }}>{classroom.type === 'lab' ? '🔬' : '🏫'}</span>
+                            </div>
+                            {classroom.capacity && (
+                                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '12px' }}>
+                                    Capacity: {classroom.capacity} students
+                                </p>
+                            )}
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => handleEdit(classroom)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px',
+                                        background: '#f3f4f6',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    ✏️ Edit
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(classroom.id)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '8px',
+                                        background: '#fee2e2',
+                                        color: '#dc2626',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '13px'
+                                    }}
+                                >
+                                    🗑️ Delete
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
     )
 }

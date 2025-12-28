@@ -1,274 +1,181 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import {
-    Calendar,
-    Loader2,
-    ArrowLeft
-} from 'lucide-react'
-import { SEMESTER_OPTIONS, getYearOptions } from '@/lib/types'
-import Link from 'next/link'
 
 export default function NewTimetablePage() {
-    const [loading, setLoading] = useState(false)
-    const [checkingData, setCheckingData] = useState(true)
-    const [hasLecturers, setHasLecturers] = useState(false)
-    const [hasClassrooms, setHasClassrooms] = useState(false)
-
-    // Form state
+    const [name, setName] = useState('')
     const [className, setClassName] = useState('')
-    const [semester, setSemester] = useState('I')
-    const [year, setYear] = useState(String(new Date().getFullYear()))
-    const [section, setSection] = useState('')
+    const [semester, setSemester] = useState('1')
+    const [section, setSection] = useState('A')
+    const [academicYear, setAcademicYear] = useState('2024-25')
+    const [loading, setLoading] = useState(false)
 
     const router = useRouter()
     const supabase = createClient()
     const { toast } = useToast()
 
-    const yearOptions = getYearOptions()
-
-    useEffect(() => {
-        checkPrerequisites()
-    }, [])
-
-    const checkPrerequisites = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
-                router.push('/auth')
-                return
-            }
-
-            const [{ count: lecturerCount }, { count: classroomCount }] = await Promise.all([
-                supabase.from('lecturers').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-                supabase.from('classrooms').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
-            ])
-
-            setHasLecturers((lecturerCount || 0) > 0)
-            setHasClassrooms((classroomCount || 0) > 0)
-        } catch (error) {
-            console.error('Error checking prerequisites:', error)
-        } finally {
-            setCheckingData(false)
-        }
+    const inputStyle = {
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: '16px',
+        border: '2px solid #e5e7eb',
+        borderRadius: '8px',
+        outline: 'none',
+        boxSizing: 'border-box' as const,
+        background: 'white'
     }
 
-    const handleCreate = async () => {
+    const labelStyle = {
+        display: 'block',
+        marginBottom: '6px',
+        fontWeight: '600' as const,
+        color: '#374151',
+        fontSize: '14px'
+    }
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault()
         if (!className.trim()) {
-            toast({
-                title: 'Class Name Required',
-                description: 'Please enter the class/program name',
-                variant: 'destructive'
-            })
+            toast({ title: 'Error', description: 'Class name is required', variant: 'destructive' })
             return
         }
 
         setLoading(true)
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+        const { data: { user } } = await supabase.auth.getUser()
 
-            const title = `${className} Sem ${semester}${section ? ` Section ${section}` : ''} - ${year}`
+        if (user) {
+            const ttName = name.trim() || `${className} - Sem ${semester} - Section ${section}`
+            const { data, error } = await supabase.from('timetables').insert({
+                user_id: user.id,
+                name: ttName,
+                class_name: className,
+                semester,
+                section,
+                academic_year: academicYear,
+                status: 'draft'
+            }).select().single()
 
-            const { data, error } = await supabase
-                .from('timetables')
-                .insert([{
-                    user_id: user.id,
-                    class_name: className.trim(),
-                    semester,
-                    year,
-                    section: section.trim() || null,
-                    title,
-                    status: 'in_progress'
-                }])
-                .select()
-                .single()
-
-            if (error) throw error
-
-            toast({ title: 'Success', description: 'Timetable created! Start adding classes.' })
-            router.push(`/dashboard/timetables/${data.id}`)
-        } catch (error) {
-            console.error('Error creating timetable:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to create timetable',
-                variant: 'destructive'
-            })
-        } finally {
-            setLoading(false)
+            if (error) {
+                toast({ title: 'Error', description: error.message, variant: 'destructive' })
+            } else {
+                toast({ title: 'Created', description: 'Timetable created successfully' })
+                router.push(`/dashboard/timetables/${data.id}`)
+            }
         }
+        setLoading(false)
     }
-
-    if (checkingData) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        )
-    }
-
-    const canCreate = hasLecturers && hasClassrooms
 
     return (
-        <div className="max-w-2xl mx-auto space-y-6">
-            {/* Header */}
-            <div className="flex items-center gap-4">
-                <Link href="/dashboard/timetables">
-                    <Button variant="ghost" size="icon">
-                        <ArrowLeft className="w-5 h-5" />
-                    </Button>
-                </Link>
-                <div>
-                    <h1 className="text-3xl font-bold">Create New Timetable</h1>
-                    <p className="text-gray-600 dark:text-gray-400">
-                        Set up a timetable for a class
-                    </p>
-                </div>
-            </div>
+        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '8px' }}>
+                Create New Timetable
+            </h1>
+            <p style={{ color: '#6b7280', marginBottom: '32px' }}>
+                Set up a new timetable for a class
+            </p>
 
-            {/* Prerequisites Warning */}
-            {!canCreate && (
-                <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20">
-                    <CardContent className="py-4">
-                        <h3 className="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
-                            Prerequisites Missing
-                        </h3>
-                        <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-4">
-                            Before creating a timetable, you need to add:
+            <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '32px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
+                <form onSubmit={handleCreate}>
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={labelStyle}>Timetable Name (Optional)</label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="e.g., CS 3rd Year - Section A"
+                            style={inputStyle}
+                        />
+                        <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                            Leave blank to auto-generate
                         </p>
-                        <div className="flex gap-2">
-                            {!hasLecturers && (
-                                <Link href="/dashboard/lecturers">
-                                    <Button size="sm" variant="outline" className="border-yellow-400 text-yellow-700">
-                                        Add Lecturers First
-                                    </Button>
-                                </Link>
-                            )}
-                            {!hasClassrooms && (
-                                <Link href="/dashboard/classrooms">
-                                    <Button size="sm" variant="outline" className="border-yellow-400 text-yellow-700">
-                                        Add Classrooms First
-                                    </Button>
-                                </Link>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Form */}
-            <Card className="premium-card">
-                <CardHeader>
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center">
-                            <Calendar className="w-7 h-7 text-white" />
-                        </div>
-                        <div>
-                            <CardTitle>Timetable Details</CardTitle>
-                            <CardDescription>
-                                Enter the class information for this timetable
-                            </CardDescription>
-                        </div>
                     </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="className">Class/Program Name *</Label>
-                        <Input
-                            id="className"
-                            placeholder="e.g., MCA, B.Tech CSE, BCA"
+
+                    <div style={{ marginBottom: '20px' }}>
+                        <label style={labelStyle}>Class Name *</label>
+                        <input
+                            type="text"
                             value={className}
                             onChange={(e) => setClassName(e.target.value)}
-                            className="text-lg"
+                            placeholder="e.g., B.Tech CSE 3rd Year"
+                            style={inputStyle}
+                            required
                         />
-                        <p className="text-sm text-gray-500">
-                            The name of the program or class
-                        </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="semester">Semester *</Label>
-                            <Select value={semester} onValueChange={setSemester}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {SEMESTER_OPTIONS.map((sem) => (
-                                        <SelectItem key={sem} value={sem}>
-                                            Semester {sem}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                        <div>
+                            <label style={labelStyle}>Semester *</label>
+                            <select value={semester} onChange={(e) => setSemester(e.target.value)} style={inputStyle}>
+                                {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="year">Year *</Label>
-                            <Select value={year} onValueChange={setYear}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {yearOptions.map((y) => (
-                                        <SelectItem key={y} value={y}>{y}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        <div>
+                            <label style={labelStyle}>Section *</label>
+                            <select value={section} onChange={(e) => setSection(e.target.value)} style={inputStyle}>
+                                {['A', 'B', 'C', 'D', 'E'].map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="section">Section (optional)</Label>
-                        <Input
-                            id="section"
-                            placeholder="e.g., A, B, or leave empty"
-                            value={section}
-                            onChange={(e) => setSection(e.target.value)}
+                    <div style={{ marginBottom: '28px' }}>
+                        <label style={labelStyle}>Academic Year *</label>
+                        <input
+                            type="text"
+                            value={academicYear}
+                            onChange={(e) => setAcademicYear(e.target.value)}
+                            placeholder="e.g., 2024-25"
+                            style={inputStyle}
                         />
-                        <p className="text-sm text-gray-500">
-                            If the class has multiple sections, specify which one
-                        </p>
                     </div>
 
-                    {/* Preview */}
-                    <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Preview:</p>
-                        <p className="font-semibold text-lg">
-                            {className || 'Class Name'} - Sem {semester}
-                            {section && ` (Section ${section})`} - {year}
-                        </p>
-                    </div>
-
-                    <div className="flex gap-4">
-                        <Link href="/dashboard/timetables" className="flex-1">
-                            <Button variant="outline" className="w-full">
-                                Cancel
-                            </Button>
-                        </Link>
-                        <Button
-                            onClick={handleCreate}
-                            disabled={loading || !canCreate}
-                            className="flex-1 btn-gradient"
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            style={{
+                                flex: 1,
+                                padding: '14px 24px',
+                                background: loading ? '#9ca3af' : '#4f46e5',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '600',
+                                fontSize: '16px',
+                                cursor: loading ? 'not-allowed' : 'pointer'
+                            }}
                         >
-                            {loading ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <Calendar className="w-4 h-4 mr-2" />
-                            )}
-                            Create Timetable
-                        </Button>
+                            {loading ? 'Creating...' : 'Create Timetable'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => router.back()}
+                            style={{
+                                padding: '14px 24px',
+                                background: '#f3f4f6',
+                                color: '#374151',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '500',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Cancel
+                        </button>
                     </div>
-                </CardContent>
-            </Card>
+                </form>
+            </div>
         </div>
     )
 }

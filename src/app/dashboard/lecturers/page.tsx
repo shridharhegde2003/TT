@@ -2,402 +2,329 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
-import {
-    Plus,
-    Trash2,
-    Save,
-    Users,
-    Loader2,
-    Edit2,
-    X,
-    Search
-} from 'lucide-react'
-import type { Lecturer } from '@/lib/types'
+
+interface Lecturer {
+    id: string
+    full_name: string
+    short_name: string
+    email?: string
+    department?: string
+}
 
 export default function LecturersPage() {
     const [lecturers, setLecturers] = useState<Lecturer[]>([])
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [showAddForm, setShowAddForm] = useState(false)
+    const [showForm, setShowForm] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
-
-    // Form state
     const [fullName, setFullName] = useState('')
     const [shortName, setShortName] = useState('')
     const [email, setEmail] = useState('')
-    const [phone, setPhone] = useState('')
     const [department, setDepartment] = useState('')
-    const [autoGenerate, setAutoGenerate] = useState(true)
+    const [loading, setLoading] = useState(false)
 
     const supabase = createClient()
     const { toast } = useToast()
 
-    useEffect(() => {
-        fetchLecturers()
-    }, [])
-
-    useEffect(() => {
-        if (autoGenerate && fullName) {
-            generateShortName(fullName)
-        }
-    }, [fullName, autoGenerate])
-
-    const generateShortName = (name: string) => {
-        const words = name.trim().split(' ').filter(w => w.length > 0)
-        const initials = words.map(w => w[0].toUpperCase()).join('')
-        setShortName(initials)
+    const inputStyle = {
+        width: '100%',
+        padding: '12px 16px',
+        fontSize: '16px',
+        border: '2px solid #e5e7eb',
+        borderRadius: '8px',
+        outline: 'none',
+        boxSizing: 'border-box' as const,
+        background: 'white'
     }
 
-    const fetchLecturers = async () => {
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
+    const labelStyle = {
+        display: 'block',
+        marginBottom: '6px',
+        fontWeight: '600' as const,
+        color: '#374151',
+        fontSize: '14px'
+    }
 
-            const { data, error } = await supabase
-                .from('lecturers')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('full_name', { ascending: true })
+    useEffect(() => {
+        loadLecturers()
+    }, [])
 
-            if (error) throw error
+    const loadLecturers = async () => {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+            const { data } = await supabase.from('lecturers').select('*').eq('user_id', user.id).order('full_name')
             setLecturers(data || [])
-        } catch (error) {
-            console.error('Error fetching lecturers:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to load lecturers',
-                variant: 'destructive'
-            })
-        } finally {
-            setLoading(false)
+        }
+    }
+
+    const generateShortName = (name: string) => {
+        const words = name.trim().split(' ')
+        if (words.length >= 2) {
+            return words.map(w => w[0]).join('').toUpperCase()
+        }
+        return name.substring(0, 3).toUpperCase()
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!fullName.trim() || !shortName.trim()) {
+            toast({ title: 'Error', description: 'Name and short name are required', variant: 'destructive' })
+            return
+        }
+
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (user) {
+            if (editingId) {
+                await supabase.from('lecturers').update({
+                    full_name: fullName,
+                    short_name: shortName,
+                    email,
+                    department
+                }).eq('id', editingId)
+                toast({ title: 'Updated', description: 'Lecturer updated successfully' })
+            } else {
+                await supabase.from('lecturers').insert({
+                    user_id: user.id,
+                    full_name: fullName,
+                    short_name: shortName,
+                    email,
+                    department
+                })
+                toast({ title: 'Added', description: 'Lecturer added successfully' })
+            }
+            resetForm()
+            loadLecturers()
+        }
+        setLoading(false)
+    }
+
+    const handleEdit = (lecturer: Lecturer) => {
+        setEditingId(lecturer.id)
+        setFullName(lecturer.full_name)
+        setShortName(lecturer.short_name)
+        setEmail(lecturer.email || '')
+        setDepartment(lecturer.department || '')
+        setShowForm(true)
+    }
+
+    const handleDelete = async (id: string) => {
+        if (confirm('Delete this lecturer?')) {
+            await supabase.from('lecturers').delete().eq('id', id)
+            toast({ title: 'Deleted', description: 'Lecturer removed' })
+            loadLecturers()
         }
     }
 
     const resetForm = () => {
+        setShowForm(false)
+        setEditingId(null)
         setFullName('')
         setShortName('')
         setEmail('')
-        setPhone('')
         setDepartment('')
-        setAutoGenerate(true)
-        setEditingId(null)
-        setShowAddForm(false)
-    }
-
-    const handleSave = async () => {
-        if (!fullName.trim()) {
-            toast({
-                title: 'Name Required',
-                description: 'Please enter the lecturer\'s full name',
-                variant: 'destructive'
-            })
-            return
-        }
-
-        if (!shortName.trim()) {
-            toast({
-                title: 'Short Name Required',
-                description: 'Please enter or generate a short name',
-                variant: 'destructive'
-            })
-            return
-        }
-
-        setSaving(true)
-        try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) return
-
-            const lecturerData = {
-                user_id: user.id,
-                full_name: fullName.trim(),
-                short_name: shortName.trim().toUpperCase(),
-                email: email.trim() || null,
-                phone: phone.trim() || null,
-                department: department.trim() || null
-            }
-
-            if (editingId) {
-                const { error } = await supabase
-                    .from('lecturers')
-                    .update(lecturerData)
-                    .eq('id', editingId)
-
-                if (error) throw error
-                toast({ title: 'Success', description: 'Lecturer updated successfully' })
-            } else {
-                const { error } = await supabase
-                    .from('lecturers')
-                    .insert([lecturerData])
-
-                if (error) throw error
-                toast({ title: 'Success', description: 'Lecturer added successfully' })
-            }
-
-            resetForm()
-            fetchLecturers()
-        } catch (error) {
-            console.error('Error saving lecturer:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to save lecturer',
-                variant: 'destructive'
-            })
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const handleEdit = (lecturer: Lecturer) => {
-        setFullName(lecturer.full_name)
-        setShortName(lecturer.short_name)
-        setEmail(lecturer.email || '')
-        setPhone(lecturer.phone || '')
-        setDepartment(lecturer.department || '')
-        setAutoGenerate(false)
-        setEditingId(lecturer.id)
-        setShowAddForm(true)
-    }
-
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this lecturer?')) return
-
-        try {
-            const { error } = await supabase
-                .from('lecturers')
-                .delete()
-                .eq('id', id)
-
-            if (error) throw error
-
-            toast({ title: 'Deleted', description: 'Lecturer removed successfully' })
-            fetchLecturers()
-        } catch (error) {
-            console.error('Error deleting lecturer:', error)
-            toast({
-                title: 'Error',
-                description: 'Failed to delete lecturer',
-                variant: 'destructive'
-            })
-        }
-    }
-
-    const filteredLecturers = lecturers.filter(l =>
-        l.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.short_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        l.department?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        )
     }
 
     return (
-        <div className="space-y-6">
+        <div>
             {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h1 className="text-3xl font-bold">Lecturers</h1>
-                    <p className="text-gray-600 dark:text-gray-400">
-                        Manage faculty members and their short names
-                    </p>
+                    <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#111827', marginBottom: '4px' }}>
+                        Lecturers
+                    </h1>
+                    <p style={{ color: '#6b7280' }}>{lecturers.length} lecturer(s) added</p>
                 </div>
-                <Button
-                    onClick={() => { resetForm(); setShowAddForm(true); }}
-                    className="btn-gradient"
+                <button
+                    onClick={() => { resetForm(); setShowForm(true) }}
+                    style={{
+                        padding: '12px 24px',
+                        background: '#4f46e5',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                    }}
                 >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Lecturer
-                </Button>
+                    + Add Lecturer
+                </button>
             </div>
 
-            {/* Add/Edit Form */}
-            {showAddForm && (
-                <Card className="premium-card border-purple-200 dark:border-purple-800">
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle>{editingId ? 'Edit Lecturer' : 'Add New Lecturer'}</CardTitle>
-                            <Button variant="ghost" size="icon" onClick={resetForm}>
-                                <X className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="fullName">Full Name *</Label>
-                                <Input
-                                    id="fullName"
-                                    placeholder="e.g., Ramesh Gupta"
+            {/* Form */}
+            {showForm && (
+                <div style={{
+                    background: 'white',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    marginBottom: '24px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>
+                        {editingId ? 'Edit Lecturer' : 'Add New Lecturer'}
+                    </h2>
+                    <form onSubmit={handleSubmit}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                            <div>
+                                <label style={labelStyle}>Full Name *</label>
+                                <input
+                                    type="text"
                                     value={fullName}
-                                    onChange={(e) => setFullName(e.target.value)}
+                                    onChange={(e) => {
+                                        setFullName(e.target.value)
+                                        if (!editingId) setShortName(generateShortName(e.target.value))
+                                    }}
+                                    placeholder="Dr. John Smith"
+                                    style={inputStyle}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="shortName">Short Name *</Label>
-                                    <label className="flex items-center gap-2 text-sm">
-                                        <input
-                                            type="checkbox"
-                                            checked={autoGenerate}
-                                            onChange={(e) => {
-                                                setAutoGenerate(e.target.checked)
-                                                if (e.target.checked && fullName) {
-                                                    generateShortName(fullName)
-                                                }
-                                            }}
-                                            className="rounded"
-                                        />
-                                        Auto-generate
-                                    </label>
-                                </div>
-                                <Input
-                                    id="shortName"
-                                    placeholder="e.g., RG"
+                            <div>
+                                <label style={labelStyle}>Short Name *</label>
+                                <input
+                                    type="text"
                                     value={shortName}
                                     onChange={(e) => setShortName(e.target.value.toUpperCase())}
-                                    disabled={autoGenerate}
-                                    className={autoGenerate ? 'bg-gray-100 dark:bg-gray-800' : ''}
+                                    placeholder="JS"
+                                    maxLength={5}
+                                    style={inputStyle}
                                 />
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email (optional)</Label>
-                                <Input
-                                    id="email"
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                            <div>
+                                <label style={labelStyle}>Email (Optional)</label>
+                                <input
                                     type="email"
-                                    placeholder="ramesh@college.edu"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="john@college.edu"
+                                    style={inputStyle}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="phone">Phone (optional)</Label>
-                                <Input
-                                    id="phone"
-                                    placeholder="9876543210"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value)}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="department">Department (optional)</Label>
-                                <Input
-                                    id="department"
-                                    placeholder="Computer Science"
+                            <div>
+                                <label style={labelStyle}>Department (Optional)</label>
+                                <input
+                                    type="text"
                                     value={department}
                                     onChange={(e) => setDepartment(e.target.value)}
+                                    placeholder="Computer Science"
+                                    style={inputStyle}
                                 />
                             </div>
                         </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={resetForm}>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: loading ? '#9ca3af' : '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: '600',
+                                    cursor: loading ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                {loading ? 'Saving...' : editingId ? 'Update' : 'Add Lecturer'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={resetForm}
+                                style={{
+                                    padding: '12px 24px',
+                                    background: '#f3f4f6',
+                                    color: '#374151',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontWeight: '500',
+                                    cursor: 'pointer'
+                                }}
+                            >
                                 Cancel
-                            </Button>
-                            <Button onClick={handleSave} disabled={saving} className="btn-gradient">
-                                {saving ? (
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                ) : (
-                                    <Save className="w-4 h-4 mr-2" />
-                                )}
-                                {editingId ? 'Update' : 'Save'}
-                            </Button>
+                            </button>
                         </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Search */}
-            <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                    placeholder="Search lecturers..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                />
-            </div>
-
-            {/* Lecturers List */}
-            {filteredLecturers.length > 0 ? (
-                <div className="grid gap-4">
-                    {filteredLecturers.map((lecturer) => (
-                        <Card key={lecturer.id} className="premium-card">
-                            <CardContent className="flex items-center justify-between py-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-bold">
-                                        {lecturer.short_name}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold">{lecturer.full_name}</h3>
-                                        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                                            {lecturer.department && (
-                                                <span>{lecturer.department}</span>
-                                            )}
-                                            {lecturer.email && (
-                                                <>
-                                                    {lecturer.department && <span>•</span>}
-                                                    <span>{lecturer.email}</span>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleEdit(lecturer)}
-                                        className="text-gray-500 hover:text-blue-600"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDelete(lecturer.id)}
-                                        className="text-gray-500 hover:text-red-600"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                    </form>
                 </div>
-            ) : (
-                <Card className="premium-card">
-                    <CardContent className="py-12 text-center">
-                        <Users className="w-12 h-12 text-gray-300 dark:text-gray-700 mx-auto mb-4" />
-                        <h3 className="font-semibold text-gray-500 dark:text-gray-400 mb-2">
-                            {searchQuery ? 'No Lecturers Found' : 'No Lecturers Added'}
-                        </h3>
-                        <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-                            {searchQuery
-                                ? 'Try a different search term'
-                                : 'Add your first lecturer to get started'
-                            }
-                        </p>
-                        {!searchQuery && (
-                            <Button onClick={() => setShowAddForm(true)} className="btn-gradient">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Add Lecturer
-                            </Button>
-                        )}
-                    </CardContent>
-                </Card>
             )}
+
+            {/* List */}
+            <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                overflow: 'hidden'
+            }}>
+                {lecturers.length === 0 ? (
+                    <div style={{ padding: '48px', textAlign: 'center', color: '#6b7280' }}>
+                        <p style={{ fontSize: '48px', marginBottom: '16px' }}>👨‍🏫</p>
+                        <p>No lecturers added yet. Click "Add Lecturer" to get started.</p>
+                    </div>
+                ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Name</th>
+                                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Short</th>
+                                <th style={{ padding: '14px 20px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Department</th>
+                                <th style={{ padding: '14px 20px', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {lecturers.map(lecturer => (
+                                <tr key={lecturer.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                    <td style={{ padding: '14px 20px' }}>
+                                        <div style={{ fontWeight: '500', color: '#111827' }}>{lecturer.full_name}</div>
+                                        {lecturer.email && <div style={{ fontSize: '13px', color: '#6b7280' }}>{lecturer.email}</div>}
+                                    </td>
+                                    <td style={{ padding: '14px 20px' }}>
+                                        <span style={{
+                                            display: 'inline-block',
+                                            padding: '4px 10px',
+                                            background: '#eef2ff',
+                                            color: '#4f46e5',
+                                            borderRadius: '4px',
+                                            fontWeight: '600',
+                                            fontSize: '13px'
+                                        }}>
+                                            {lecturer.short_name}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: '14px 20px', color: '#6b7280' }}>{lecturer.department || '-'}</td>
+                                    <td style={{ padding: '14px 20px', textAlign: 'right' }}>
+                                        <button
+                                            onClick={() => handleEdit(lecturer)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                background: '#f3f4f6',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                marginRight: '8px'
+                                            }}
+                                        >
+                                            ✏️ Edit
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(lecturer.id)}
+                                            style={{
+                                                padding: '6px 12px',
+                                                background: '#fee2e2',
+                                                color: '#dc2626',
+                                                border: 'none',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            🗑️ Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
         </div>
     )
 }

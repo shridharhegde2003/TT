@@ -1,192 +1,155 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { ThemeToggle } from '@/components/theme-toggle'
-import {
-    Calendar,
-    LayoutDashboard,
-    Users,
-    Building2,
-    BookOpen,
-    Settings,
-    LogOut,
-    Menu,
-    X,
-    ChevronRight
-} from 'lucide-react'
-
-interface DashboardLayoutProps {
-    children: React.ReactNode
-}
 
 const navItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/dashboard/timetables', label: 'Timetables', icon: Calendar },
-    { href: '/dashboard/lecturers', label: 'Lecturers', icon: Users },
-    { href: '/dashboard/classrooms', label: 'Classrooms', icon: Building2 },
-    { href: '/dashboard/subjects', label: 'Subjects', icon: BookOpen },
-    { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+    { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
+    { href: '/dashboard/lecturers', label: 'Lecturers', icon: '👨‍🏫' },
+    { href: '/dashboard/classrooms', label: 'Classrooms', icon: '🏫' },
+    { href: '/dashboard/subjects', label: 'Subjects', icon: '📚' },
+    { href: '/dashboard/timetables', label: 'Timetables', icon: '📅' },
+    { href: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
 ]
 
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
-    const [sidebarOpen, setSidebarOpen] = useState(false)
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+    const [sidebarOpen, setSidebarOpen] = useState(true)
     const [user, setUser] = useState<any>(null)
-    const [collegeName, setCollegeName] = useState('')
-    const pathname = usePathname()
     const router = useRouter()
+    const pathname = usePathname()
     const supabase = createClient()
 
     useEffect(() => {
+        const checkAuth = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+                router.push('/auth')
+            } else {
+                setUser(user)
+            }
+        }
         checkAuth()
     }, [])
 
-    const checkAuth = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            router.push('/auth')
-            return
-        }
-        setUser(user)
-
-        // Get college name
-        const { data: settings } = await supabase
-            .from('college_settings')
-            .select('college_name')
-            .eq('user_id', user.id)
-            .single()
-
-        if (settings) {
-            setCollegeName(settings.college_name)
-        }
-
-        // Check if onboarded
-        const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('is_onboarded')
-            .eq('user_id', user.id)
-            .single()
-
-        if (!profile?.is_onboarded) {
-            router.push('/onboarding')
-        }
-    }
-
     const handleLogout = async () => {
         await supabase.auth.signOut()
-        router.push('/')
+        router.push('/auth')
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-            {/* Mobile sidebar overlay */}
-            {sidebarOpen && (
-                <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-                    onClick={() => setSidebarOpen(false)}
-                />
-            )}
-
+        <div style={{ display: 'flex', minHeight: '100vh', background: '#f3f4f6' }}>
             {/* Sidebar */}
-            <aside className={`fixed top-0 left-0 z-50 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}>
-                <div className="flex flex-col h-full">
-                    {/* Logo */}
-                    <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-                        <Link href="/dashboard" className="flex items-center space-x-2">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center">
-                                <Calendar className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                                <span className="text-lg font-bold text-gradient">TimeTable Pro</span>
-                                {collegeName && (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[140px]">
-                                        {collegeName}
-                                    </p>
-                                )}
-                            </div>
+            <aside style={{
+                width: sidebarOpen ? '240px' : '0px',
+                background: 'white',
+                borderRight: '1px solid #e5e7eb',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'width 0.2s',
+                overflow: 'hidden'
+            }}>
+                {/* Logo */}
+                <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb' }}>
+                    <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '24px' }}>📅</span>
+                        <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>TimeTable Pro</span>
+                    </Link>
+                </div>
+
+                {/* Nav Items */}
+                <nav style={{ flex: 1, padding: '16px 12px' }}>
+                    {navItems.map(item => (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '12px 16px',
+                                marginBottom: '4px',
+                                borderRadius: '8px',
+                                textDecoration: 'none',
+                                color: pathname === item.href ? '#4f46e5' : '#374151',
+                                background: pathname === item.href ? '#eef2ff' : 'transparent',
+                                fontWeight: pathname === item.href ? '600' : '500'
+                            }}
+                        >
+                            <span style={{ fontSize: '18px' }}>{item.icon}</span>
+                            <span>{item.label}</span>
                         </Link>
-                    </div>
+                    ))}
+                </nav>
 
-                    {/* Navigation */}
-                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-                        {navItems.map((item) => {
-                            const isActive = pathname === item.href ||
-                                (item.href !== '/dashboard' && pathname.startsWith(item.href))
-
-                            return (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    onClick={() => setSidebarOpen(false)}
-                                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
-                                            ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
-                                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
-                                        }`}
-                                >
-                                    <item.icon className={`w-5 h-5 ${isActive ? 'text-purple-600 dark:text-purple-400' : 'text-gray-500'
-                                        }`} />
-                                    <span className="font-medium">{item.label}</span>
-                                    {isActive && (
-                                        <ChevronRight className="w-4 h-4 ml-auto text-purple-500" />
-                                    )}
-                                </Link>
-                            )
-                        })}
-                    </nav>
-
-                    {/* Footer */}
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-                        <div className="flex items-center justify-between mb-4">
-                            <ThemeToggle />
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleLogout}
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                            >
-                                <LogOut className="w-4 h-4 mr-2" />
-                                Logout
-                            </Button>
-                        </div>
-                        {user && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                                {user.email}
-                            </p>
-                        )}
-                    </div>
+                {/* Logout */}
+                <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb' }}>
+                    <button
+                        onClick={handleLogout}
+                        style={{
+                            width: '100%',
+                            padding: '12px',
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontWeight: '500',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        🚪 Logout
+                    </button>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <div className="lg:ml-64">
-                {/* Top bar (mobile) */}
-                <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 lg:hidden">
-                    <div className="flex items-center justify-between px-4 py-3">
-                        <button
-                            onClick={() => setSidebarOpen(true)}
-                            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                        >
-                            <Menu className="w-6 h-6" />
-                        </button>
-                        <Link href="/dashboard" className="flex items-center space-x-2">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center">
-                                <Calendar className="w-5 h-5 text-white" />
-                            </div>
-                            <span className="font-bold text-gradient">TimeTable Pro</span>
-                        </Link>
-                        <ThemeToggle />
+            <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                {/* Top Bar */}
+                <header style={{
+                    background: 'white',
+                    padding: '16px 24px',
+                    borderBottom: '1px solid #e5e7eb',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                }}>
+                    <button
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        style={{
+                            padding: '8px 12px',
+                            background: '#f3f4f6',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '18px'
+                        }}
+                    >
+                        ☰
+                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ color: '#6b7280', fontSize: '14px' }}>{user?.email}</span>
+                        <div style={{
+                            width: '36px',
+                            height: '36px',
+                            background: '#4f46e5',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white',
+                            fontWeight: 'bold'
+                        }}>
+                            {user?.email?.[0]?.toUpperCase() || 'U'}
+                        </div>
                     </div>
                 </header>
 
                 {/* Page Content */}
-                <main className="p-4 lg:p-8">
+                <div style={{ flex: 1, padding: '24px', overflowY: 'auto' }}>
                     {children}
-                </main>
-            </div>
+                </div>
+            </main>
         </div>
     )
 }
