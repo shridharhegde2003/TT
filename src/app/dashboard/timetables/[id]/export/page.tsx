@@ -615,7 +615,7 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
     }
 
     if (slot.is_practical && slot.lab_batches && slot.lab_batches.length > 0) {
-        // 2x2 Grid Layout for Practical with lecturers
+        // 2x2 Grid Layout for Practical batches
         return (
             <div style={{ fontSize: '10px' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#059669', fontSize: '11px' }}>PRACTICAL</div>
@@ -630,15 +630,17 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
                             key={i}
                             style={{
                                 background: '#f0fdf4',
-                                padding: '3px',
+                                padding: '4px',
                                 borderRadius: '3px',
                                 border: '1px solid #d1fae5'
                             }}
                         >
-                            <div style={{ fontWeight: '600' }}>{batch.batch_name}:</div>
-                            <div>{batch.subject?.code}</div>
-                            <div style={{ color: '#6b7280' }}>{batch.lecturer?.short_name || batch.lecturer?.full_name}</div>
-                            <div style={{ color: '#9ca3af', fontSize: '8px' }}>({batch.classroom?.name || slot.classroom?.name})</div>
+                            <div style={{ fontWeight: 'bold', fontSize: '10px' }}>
+                                {batch.batch_name}:{batch.subject?.code}
+                            </div>
+                            <div style={{ fontSize: '9px', color: '#4b5563' }}>
+                                {batch.lecturer?.short_name || batch.lecturer?.full_name} • {batch.classroom?.name || slot.classroom?.name}
+                            </div>
                         </div>
                     ))}
                 </div>
