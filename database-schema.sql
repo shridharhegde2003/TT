@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS subjects (
     name TEXT NOT NULL,
     code TEXT,
     is_practical BOOLEAN DEFAULT FALSE,
+    no_lecturer_required BOOLEAN DEFAULT FALSE,
     color TEXT DEFAULT '#3B82F6',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

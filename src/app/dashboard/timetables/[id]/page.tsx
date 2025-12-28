@@ -70,6 +70,7 @@ interface Subject {
     id: string
     name: string
     code: string
+    no_lecturer_required?: boolean
 }
 
 interface LabBatch {
@@ -410,10 +411,9 @@ export default function TimetableEditorPage() {
 
             if (slotType === 'class') {
                 slotData.subject_id = isPractical ? null : selectedSubject
-                // Cultural subjects don't need a lecturer
+                // Check if subject doesn't require a lecturer
                 const selectedSubjectObj = subjects.find(s => s.id === selectedSubject)
-                const isCulturalSubject = selectedSubjectObj?.name?.toLowerCase().includes('cultural')
-                slotData.lecturer_id = (isPractical || isCulturalSubject) ? null : selectedLecturer
+                slotData.lecturer_id = (isPractical || selectedSubjectObj?.no_lecturer_required) ? null : selectedLecturer
                 slotData.classroom_id = selectedClassroom
             }
 
@@ -950,18 +950,18 @@ export default function TimetableEditorPage() {
                                             </div>
 
                                             <div style={{ marginBottom: '16px' }}>
-                                                <label style={labelStyle}>Lecturer {subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? '(N/A for Cultural)' : '*'}</label>
+                                                <label style={labelStyle}>Lecturer {subjects.find(s => s.id === selectedSubject)?.no_lecturer_required ? '(Not Required)' : '*'}</label>
                                                 <select
-                                                    value={subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? '' : selectedLecturer}
+                                                    value={subjects.find(s => s.id === selectedSubject)?.no_lecturer_required ? '' : selectedLecturer}
                                                     onChange={(e) => setSelectedLecturer(e.target.value)}
-                                                    disabled={!!subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural')}
+                                                    disabled={!!subjects.find(s => s.id === selectedSubject)?.no_lecturer_required}
                                                     style={{
                                                         ...selectStyle,
-                                                        backgroundColor: subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? '#f3f4f6' : 'white',
-                                                        cursor: subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? 'not-allowed' : 'pointer'
+                                                        backgroundColor: subjects.find(s => s.id === selectedSubject)?.no_lecturer_required ? '#f3f4f6' : 'white',
+                                                        cursor: subjects.find(s => s.id === selectedSubject)?.no_lecturer_required ? 'not-allowed' : 'pointer'
                                                     }}
                                                 >
-                                                    <option value="">{subjects.find(s => s.id === selectedSubject)?.name?.toLowerCase().includes('cultural') ? 'Not Required' : 'Select lecturer'}</option>
+                                                    <option value="">{subjects.find(s => s.id === selectedSubject)?.no_lecturer_required ? 'Not Required' : 'Select lecturer'}</option>
                                                     {lecturers.map(lec => (
                                                         <option key={lec.id} value={lec.id}>
                                                             {lec.full_name} ({lec.short_name})

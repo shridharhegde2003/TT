@@ -28,7 +28,7 @@ interface TimetableSlot {
     subject_id?: string
     lecturer_id?: string
     classroom_id?: string
-    subject?: { name: string, code: string }
+    subject?: { name: string, code: string, no_lecturer_required?: boolean }
     lecturer?: { full_name: string, short_name: string }
     classroom?: { name: string }
     is_practical: boolean
@@ -600,11 +600,11 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
         return null // Handled by grid
     }
 
-    if (slot.slot_type === 'cultural' || slot.subject?.name?.toLowerCase().includes('cultural')) {
+    // Subjects that don't require a lecturer (e.g., Cultural Activity, Sports, Library Hour)
+    if (slot.subject?.no_lecturer_required) {
         return (
             <div>
-                <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#7c3aed' }}>CULTURAL</div>
-                <div style={{ fontSize: '10px', color: '#4b5563' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#7c3aed' }}>
                     {slot.subject?.code || slot.subject?.name || 'Activity'}
                 </div>
                 <div style={{ fontSize: '9px', color: '#9ca3af' }}>

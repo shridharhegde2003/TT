@@ -9,6 +9,7 @@ interface Subject {
     id: string
     name: string
     code: string
+    no_lecturer_required: boolean
 }
 
 export default function SubjectsPage() {
@@ -17,6 +18,7 @@ export default function SubjectsPage() {
     const [editingId, setEditingId] = useState<string | null>(null)
     const [name, setName] = useState('')
     const [code, setCode] = useState('')
+    const [noLecturerRequired, setNoLecturerRequired] = useState(false)
     const [loading, setLoading] = useState(false)
 
     const supabase = createClient()
@@ -70,7 +72,8 @@ export default function SubjectsPage() {
             if (editingId) {
                 const { error } = await supabase.from('subjects').update({
                     name: name.trim(),
-                    code: code.trim()
+                    code: code.trim(),
+                    no_lecturer_required: noLecturerRequired
                 }).eq('id', editingId)
 
                 if (error) {
@@ -85,7 +88,8 @@ export default function SubjectsPage() {
                 const { error } = await supabase.from('subjects').insert({
                     user_id: user.id,
                     name: name.trim(),
-                    code: code.trim()
+                    code: code.trim(),
+                    no_lecturer_required: noLecturerRequired
                 })
 
                 if (error) {
@@ -105,6 +109,7 @@ export default function SubjectsPage() {
         setEditingId(subject.id)
         setName(subject.name)
         setCode(subject.code)
+        setNoLecturerRequired(subject.no_lecturer_required || false)
         setShowForm(true)
     }
 
@@ -125,6 +130,7 @@ export default function SubjectsPage() {
         setEditingId(null)
         setName('')
         setCode('')
+        setNoLecturerRequired(false)
     }
 
     return (
@@ -192,6 +198,25 @@ export default function SubjectsPage() {
                                 />
                             </div>
                         </div>
+
+                        {/* No Lecturer Required Checkbox */}
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={noLecturerRequired}
+                                    onChange={(e) => setNoLecturerRequired(e.target.checked)}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                />
+                                <span style={{ fontSize: '14px', color: '#374151' }}>
+                                    <strong>No Lecturer Required</strong>
+                                    <span style={{ color: '#6b7280', marginLeft: '8px' }}>
+                                        (e.g., Cultural Activity, Sports, Library Hour)
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <button
                                 type="submit"
@@ -274,6 +299,20 @@ export default function SubjectsPage() {
                                 }}>
                                     {subject.code}
                                 </span>
+                                {subject.no_lecturer_required && (
+                                    <span style={{
+                                        display: 'inline-block',
+                                        padding: '4px 10px',
+                                        background: '#fef3c7',
+                                        borderRadius: '4px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
+                                        color: '#d97706',
+                                        marginLeft: '8px'
+                                    }}>
+                                        No Lecturer
+                                    </span>
+                                )}
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button
