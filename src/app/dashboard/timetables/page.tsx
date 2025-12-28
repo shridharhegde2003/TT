@@ -12,8 +12,8 @@ interface Timetable {
     class_name: string
     semester: string
     section?: string
-    academic_year: string
-    status: 'draft' | 'published'
+    year: string
+    status: string // 'in_progress' | 'done'
     created_at: string
 }
 
@@ -42,6 +42,26 @@ export default function TimetablesPage() {
             toast({ title: 'Deleted', description: 'Timetable removed' })
             loadTimetables()
         }
+    }
+
+    const getStatusBadge = (status: string) => {
+        const isFinal = status === 'done' || status === 'published'
+        return (
+            <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                background: isFinal ? '#d1fae5' : '#fef3c7',
+                color: isFinal ? '#059669' : '#d97706',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '600'
+            }}>
+                {isFinal ? <Check size={12} /> : <FileEdit size={12} />}
+                {isFinal ? 'Final' : 'Draft'}
+            </span>
+        )
     }
 
     return (
@@ -155,23 +175,10 @@ export default function TimetablesPage() {
                                         )}
                                     </div>
                                 </div>
-                                <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    padding: '4px 10px',
-                                    background: tt.status === 'published' ? '#d1fae5' : '#fef3c7',
-                                    color: tt.status === 'published' ? '#059669' : '#d97706',
-                                    borderRadius: '6px',
-                                    fontSize: '12px',
-                                    fontWeight: '600'
-                                }}>
-                                    {tt.status === 'published' ? <Check size={12} /> : <FileEdit size={12} />}
-                                    {tt.status === 'published' ? 'Published' : 'Draft'}
-                                </span>
+                                {getStatusBadge(tt.status)}
                             </div>
                             <p style={{ color: '#6b7280', fontSize: '13px', marginBottom: '16px' }}>
-                                Academic Year: {tt.academic_year}
+                                Academic Year: {tt.year}
                             </p>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <Link href={`/dashboard/timetables/${tt.id}`} style={{ flex: 1, textDecoration: 'none' }}>

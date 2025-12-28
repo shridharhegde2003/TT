@@ -1,65 +1,60 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
+import { ArrowLeft, FileText, CheckCircle2, RotateCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import {
-    Download,
-    Loader2,
-    ArrowLeft,
-    FileImage,
-    FileText,
-    Layers,
-    SplitSquareVertical
-} from 'lucide-react'
-import type {
-    Timetable,
-    TimetableSlot,
-    CollegeSettings,
-    Lecturer,
-    Classroom,
-    Subject,
-    LabBatch
-} from '@/lib/types'
-import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
-interface SlotWithDetails extends TimetableSlot {
-    subject?: Subject
-    lecturer?: Lecturer
-    classroom?: Classroom
-    lab_batches?: (LabBatch & { subject?: Subject; lecturer?: Lecturer })[]
+interface Timetable {
+    id: string
+    title: string
+    class_name: string
+    semester: string
+    section: string
+    year: string
+    status: string
 }
 
-interface TimetableWithSlots extends Timetable {
-    slots: SlotWithDetails[]
+interface TimetableSlot {
+    id: string
+    day_of_week: string
+    start_time: string
+    end_time: string
+    slot_type: string
+    subject?: { name: string, code: string }
+    lecturer?: { full_name: string, short_name: string }
+    classroom?: { name: string }
+    is_practical: boolean
+    lab_batches?: any[]
 }
 
-export default function ExportTimetablePage() {
-    const { id } = useParams()
+interface CollegeSettings {
+    break_duration: number
+    default_class_duration: number
+    working_days: string[]
+    college_start_time: string
+    college_end_time: string
+    college_name: string
+}
+
+export default function ExportTimetable() {
+    const params = useParams()
     const router = useRouter()
+    const id = params.id as string
     const supabase = createClient()
     const { toast } = useToast()
-    const timetableRef = useRef<HTMLDivElement>(null)
-    const mergedTimetableRef = useRef<HTMLDivElement>(null)
+    const printRef = useRef<HTMLDivElement>(null)
 
-    // State
-    const [loading, setLoading] = useState(true)
-    const [exporting, setExporting] = useState(false)
-    const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape')
     const [timetable, setTimetable] = useState<Timetable | null>(null)
-    const [slots, setSlots] = useState<SlotWithDetails[]>([])
+    const [slots, setSlots] = useState<TimetableSlot[]>([])
     const [settings, setSettings] = useState<CollegeSettings | null>(null)
-
-    // Multi-section state
-    const [relatedTimetables, setRelatedTimetables] = useState<TimetableWithSlots[]>([])
-    const [exportMode, setExportMode] = useState<'single' | 'merged'>('single')
-    const [hasMultipleSections, setHasMultipleSections] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape')
+    const [isTransposed, setIsTransposed] = useState(false)
 
     useEffect(() => {
         fetchData()
@@ -67,103 +62,40 @@ export default function ExportTimetablePage() {
 
     const fetchData = async () => {
         try {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (!user) {
-                router.push('/auth')
-                return
-            }
-
-            const [
-                { data: timetableData },
-                { data: slotsData },
-                { data: settingsData }
-            ] = await Promise.all([
-                supabase.from('timetables').select('*').eq('id', id).single(),
-                supabase.from('timetable_slots')
-                    .select('*, subject:subjects(*), lecturer:lecturers(*), classroom:classrooms(*)')
-                    .eq('timetable_id', id)
-                    .order('slot_order', { ascending: true }),
-                supabase.from('college_settings').select('*').eq('user_id', user.id).single()
-            ])
-
-            if (!timetableData) {
-                router.push('/dashboard/timetables')
-                return
-            }
-
-            // Fetch lab batches
-            const practicalSlots = (slotsData || []).filter(s => s.is_practical)
-            if (practicalSlots.length > 0) {
-                const { data: batchesData } = await supabase
-                    .from('lab_batches')
-                    .select('*, subject:subjects(*), lecturer:lecturers(*)')
-                    .in('timetable_slot_id', practicalSlots.map(s => s.id))
-
-                const slotsWithBatches = (slotsData || []).map(slot => ({
-                    ...slot,
-                    lab_batches: (batchesData || []).filter(b => b.timetable_slot_id === slot.id)
-                }))
-                setSlots(slotsWithBatches)
-            } else {
-                setSlots(slotsData || [])
-            }
-
-            setTimetable(timetableData)
-            setSettings(settingsData)
-
-            // Check for related timetables with same class_name, semester, year but different sections
-            const { data: relatedData } = await supabase
+            const { data: ttData, error: ttError } = await supabase
                 .from('timetables')
                 .select('*')
-                .eq('user_id', user.id)
-                .eq('class_name', timetableData.class_name)
-                .eq('semester', timetableData.semester)
-                .eq('year', timetableData.year)
-                .neq('id', id)
-                .not('section', 'is', null)
+                .eq('id', id)
+                .single()
 
-            if (relatedData && relatedData.length > 0 && timetableData.section) {
-                setHasMultipleSections(true)
+            if (ttError) throw ttError
+            setTimetable(ttData)
 
-                // Fetch slots for all related timetables
-                const allTimetables: TimetableWithSlots[] = [{
-                    ...timetableData,
-                    slots: slotsData || []
-                }]
+            const { data: settingsData } = await supabase
+                .from('college_settings')
+                .select('*')
+                .single()
+            setSettings(settingsData)
 
-                for (const related of relatedData) {
-                    const { data: relatedSlots } = await supabase
-                        .from('timetable_slots')
-                        .select('*, subject:subjects(*), lecturer:lecturers(*), classroom:classrooms(*)')
-                        .eq('timetable_id', related.id)
-                        .order('slot_order', { ascending: true })
+            const { data: slotsData, error: slotsError } = await supabase
+                .from('timetable_slots')
+                .select(`
+                    *,
+                    subject:subjects(name, code),
+                    lecturer:lecturers(full_name, short_name),
+                    classroom:classrooms(name),
+                    lab_batches(
+                        batch_name,
+                        subject:subjects(code),
+                        lecturer:lecturers(short_name),
+                        classroom:classrooms(name)
+                    )
+                `)
+                .eq('timetable_id', id)
 
-                    // Fetch lab batches for related
-                    const relatedPracticalSlots = (relatedSlots || []).filter(s => s.is_practical)
-                    let finalRelatedSlots = relatedSlots || []
+            if (slotsError) throw slotsError
+            setSlots(slotsData || [])
 
-                    if (relatedPracticalSlots.length > 0) {
-                        const { data: relatedBatches } = await supabase
-                            .from('lab_batches')
-                            .select('*, subject:subjects(*), lecturer:lecturers(*)')
-                            .in('timetable_slot_id', relatedPracticalSlots.map(s => s.id))
-
-                        finalRelatedSlots = (relatedSlots || []).map(slot => ({
-                            ...slot,
-                            lab_batches: (relatedBatches || []).filter(b => b.timetable_slot_id === slot.id)
-                        }))
-                    }
-
-                    allTimetables.push({
-                        ...related,
-                        slots: finalRelatedSlots
-                    })
-                }
-
-                // Sort by section
-                allTimetables.sort((a, b) => (a.section || '').localeCompare(b.section || ''))
-                setRelatedTimetables(allTimetables)
-            }
         } catch (error) {
             console.error('Error:', error)
             toast({ title: 'Error', description: 'Failed to load data', variant: 'destructive' })
@@ -172,537 +104,314 @@ export default function ExportTimetablePage() {
         }
     }
 
-    const getTimeSlots = (slotsToUse: SlotWithDetails[] = slots) => {
-        const uniqueTimes = new Set<string>()
-        slotsToUse.forEach(slot => {
-            uniqueTimes.add(`${slot.start_time}-${slot.end_time}`)
+    const formatTime12 = (timeStr: string): string => {
+        if (!timeStr) return ''
+        const [hours, mins] = timeStr.split(':').map(Number)
+        const period = hours >= 12 ? 'PM' : 'AM'
+        const hour12 = hours % 12 || 12
+        return `${hour12}:${String(mins).padStart(2, '0')} ${period}`
+    }
+
+    // Grid Generation Logic
+    const timeSlots = Array.from(new Set(slots.map(s => `${s.start_time}-${s.end_time}`)))
+        .map(t => {
+            const [start, end] = t.split('-')
+            return { start, end }
         })
-        return Array.from(uniqueTimes).sort()
-    }
+        .sort((a, b) => a.start.localeCompare(b.start))
 
-    const getAllTimeSlots = () => {
-        const uniqueTimes = new Set<string>()
-        relatedTimetables.forEach(tt => {
-            tt.slots.forEach(slot => {
-                uniqueTimes.add(`${slot.start_time}-${slot.end_time}`)
-            })
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const workingDays = (settings?.working_days || []).sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b))
+
+    const handleDownloadPDF = async () => {
+        if (!printRef.current) return
+
+        const element = printRef.current
+        const canvas = await html2canvas(element, {
+            scale: 2,
+            logging: false,
+            useCORS: true
         })
-        return Array.from(uniqueTimes).sort()
+
+        const imgData = canvas.toDataURL('image/png')
+        const pdf = new jsPDF({
+            orientation: orientation,
+            unit: 'mm',
+            format: 'a4'
+        })
+
+        const pdfWidth = pdf.internal.pageSize.getWidth()
+        const pdfHeight = pdf.internal.pageSize.getHeight()
+        const imgWidth = canvas.width
+        const imgHeight = canvas.height
+        const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight)
+
+        const imgX = (pdfWidth - imgWidth * ratio) / 2
+        const imgY = 10
+
+        pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
+        pdf.save(`${timetable?.title || 'timetable'}.pdf`)
+
+        toast({ title: 'Exported!', description: 'PDF downloaded successfully' })
     }
 
-    const getSlotForDayAndTime = (day: string, timeSlot: string, slotsToUse: SlotWithDetails[] = slots) => {
-        const [start, end] = timeSlot.split('-')
-        return slotsToUse.find(s =>
-            s.day_of_week === day &&
-            s.start_time === start &&
-            s.end_time === end
-        )
-    }
-
-    const exportToPDF = async (merged: boolean = false) => {
-        const refToUse = merged ? mergedTimetableRef.current : timetableRef.current
-        if (!refToUse) return
-        setExporting(true)
-
+    const handleMarkAsFinal = async () => {
         try {
-            const canvas = await html2canvas(refToUse, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            })
-
-            const imgData = canvas.toDataURL('image/png')
-            const pdf = new jsPDF(orientation === 'landscape' ? 'l' : 'p', 'mm', 'a4')
-
-            const pdfWidth = pdf.internal.pageSize.getWidth()
-            const pdfHeight = pdf.internal.pageSize.getHeight()
-
-            const imgWidth = canvas.width
-            const imgHeight = canvas.height
-            const ratio = Math.min((pdfWidth - 20) / imgWidth, (pdfHeight - 40) / imgHeight)
-
-            const imgX = (pdfWidth - imgWidth * ratio) / 2
-            const imgY = 10
-
-            pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio)
-
-            let fileName = ''
-            if (merged) {
-                fileName = `${timetable?.class_name}_Sem${timetable?.semester}_AllSections_${timetable?.year}.pdf`
-            } else {
-                fileName = `${timetable?.class_name}_Sem${timetable?.semester}${timetable?.section ? `_Section${timetable.section}` : ''}_${timetable?.year}.pdf`
-            }
-            pdf.save(fileName.replace(/\s+/g, '_'))
-
-            toast({ title: 'Exported!', description: 'PDF downloaded successfully' })
+            await supabase.from('timetables').update({ status: 'done' }).eq('id', id)
+            toast({ title: 'Updated', description: 'Marked as Final Version' })
+            fetchData()
         } catch (error) {
-            console.error('Export error:', error)
-            toast({ title: 'Error', description: 'Failed to export PDF', variant: 'destructive' })
-        } finally {
-            setExporting(false)
+            toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' })
         }
     }
 
-    const exportToImage = async (merged: boolean = false) => {
-        const refToUse = merged ? mergedTimetableRef.current : timetableRef.current
-        if (!refToUse) return
-        setExporting(true)
-
-        try {
-            const canvas = await html2canvas(refToUse, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-            })
-
-            const link = document.createElement('a')
-            let fileName = ''
-            if (merged) {
-                fileName = `${timetable?.class_name}_Sem${timetable?.semester}_AllSections_${timetable?.year}.png`
-            } else {
-                fileName = `${timetable?.class_name}_Sem${timetable?.semester}${timetable?.section ? `_Section${timetable.section}` : ''}_${timetable?.year}.png`
-            }
-            link.download = fileName.replace(/\s+/g, '_')
-            link.href = canvas.toDataURL('image/png')
-            link.click()
-
-            toast({ title: 'Exported!', description: 'Image downloaded successfully' })
-        } catch (error) {
-            console.error('Export error:', error)
-            toast({ title: 'Error', description: 'Failed to export image', variant: 'destructive' })
-        } finally {
-            setExporting(false)
-        }
-    }
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        )
-    }
-
-    if (!timetable || !settings) {
-        return (
-            <div className="text-center py-12">
-                <p>Timetable not found</p>
-                <Link href="/dashboard/timetables">
-                    <Button className="mt-4">Back to Timetables</Button>
-                </Link>
-            </div>
-        )
-    }
-
-    const workingDays = settings.working_days || []
-    const timeSlots = getTimeSlots()
-    const allTimeSlots = hasMultipleSections ? getAllTimeSlots() : []
+    if (loading) return <div className="p-8">Loading...</div>
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <Link href={`/dashboard/timetables/${id}`}>
-                        <Button variant="ghost" size="icon">
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
-                    </Link>
-                    <div>
-                        <h1 className="text-2xl font-bold">Export Timetable</h1>
-                        <p className="text-gray-600 dark:text-gray-400">
-                            {timetable.class_name} - Sem {timetable.semester}
-                            {timetable.section && ` (Section ${timetable.section})`}
-                        </p>
-                    </div>
+        <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                <Link href={`/dashboard/timetables/${id}`}>
+                    <button style={{
+                        padding: '8px',
+                        borderRadius: '8px',
+                        border: '1px solid #e5e7eb',
+                        background: 'white',
+                        cursor: 'pointer'
+                    }}>
+                        <ArrowLeft size={20} />
+                    </button>
+                </Link>
+                <div>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold' }}>Export Timetable</h1>
+                    <p style={{ color: '#6b7280' }}>{timetable?.title}</p>
                 </div>
+
+                {timetable?.status === 'done' ? (
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', color: '#059669', background: '#d1fae5', padding: '6px 12px', borderRadius: '20px', fontSize: '14px', fontWeight: '500' }}>
+                        <CheckCircle2 size={16} />
+                        Final Version
+                    </div>
+                ) : (
+                    <button
+                        onClick={handleMarkAsFinal}
+                        style={{
+                            marginLeft: 'auto',
+                            background: '#059669',
+                            color: 'white',
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}
+                    >
+                        <CheckCircle2 size={16} />
+                        Mark as Final
+                    </button>
+                )}
             </div>
 
-            {/* Export Mode Selection for Multiple Sections */}
-            {hasMultipleSections && (
-                <Card className="premium-card border-purple-200 dark:border-purple-800">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Layers className="w-5 h-5" />
-                            Multiple Sections Detected
-                        </CardTitle>
-                        <CardDescription>
-                            Found {relatedTimetables.length} sections for {timetable.class_name} Sem {timetable.semester}.
-                            Choose how you want to export.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <button
-                                onClick={() => setExportMode('single')}
-                                className={`p-4 rounded-xl border-2 text-left transition-all ${exportMode === 'single'
-                                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30'
-                                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-3 mb-2">
-                                    <SplitSquareVertical className="w-6 h-6 text-purple-600" />
-                                    <h3 className="font-semibold">Separate PDFs</h3>
-                                </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    Export each section's timetable as a separate PDF file
-                                </p>
-                            </button>
+            <div style={{ background: 'white', padding: '24px', borderRadius: '12px', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Export Options</h2>
 
-                            <button
-                                onClick={() => setExportMode('merged')}
-                                className={`p-4 rounded-xl border-2 text-left transition-all ${exportMode === 'merged'
-                                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30'
-                                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                                    }`}
-                            >
-                                <div className="flex items-center gap-3 mb-2">
-                                    <Layers className="w-6 h-6 text-purple-600" />
-                                    <h3 className="font-semibold">Merged Timetable</h3>
-                                </div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                    All sections in one PDF with section rows for each time slot
-                                </p>
-                            </button>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Export Options */}
-            <Card className="premium-card">
-                <CardHeader>
-                    <CardTitle>Export Options</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label>Page Orientation</Label>
-                        <div className="flex gap-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                <div style={{ display: 'flex', gap: '40px', flexWrap: 'wrap' }}>
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>Page Orientation</label>
+                        <div style={{ display: 'flex', gap: '16px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                                 <input
                                     type="radio"
+                                    name="orientation"
                                     checked={orientation === 'portrait'}
                                     onChange={() => setOrientation('portrait')}
                                 />
-                                <span>Portrait</span>
+                                Portrait
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                                 <input
                                     type="radio"
+                                    name="orientation"
                                     checked={orientation === 'landscape'}
                                     onChange={() => setOrientation('landscape')}
                                 />
-                                <span>Landscape (Recommended)</span>
+                                Landscape (Recommended)
                             </label>
                         </div>
                     </div>
 
-                    <div className="flex gap-4">
-                        <Button
-                            onClick={() => exportToPDF(exportMode === 'merged')}
-                            disabled={exporting}
-                            className="btn-gradient"
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>Layout</label>
+                        <button
+                            onClick={() => setIsTransposed(!isTransposed)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '6px 12px',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '6px',
+                                background: '#f9fafb',
+                                cursor: 'pointer'
+                            }}
                         >
-                            {exporting ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <FileText className="w-4 h-4 mr-2" />
-                            )}
-                            Download PDF
-                        </Button>
-                        <Button
-                            onClick={() => exportToImage(exportMode === 'merged')}
-                            disabled={exporting}
-                            variant="outline"
-                        >
-                            {exporting ? (
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                                <FileImage className="w-4 h-4 mr-2" />
-                            )}
-                            Download Image
-                        </Button>
+                            <RotateCw size={16} />
+                            {isTransposed ? 'Days x Times (Rows x Cols)' : 'Times x Days (Rows x Cols)'}
+                        </button>
                     </div>
-                </CardContent>
-            </Card>
+                </div>
 
-            {/* Preview - Single Section */}
-            {exportMode === 'single' && (
-                <Card className="premium-card overflow-x-auto">
-                    <CardHeader>
-                        <CardTitle>Preview - Section {timetable.section || 'Single'}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div
-                            ref={timetableRef}
-                            className="bg-white p-6 min-w-[800px]"
-                            style={{ fontFamily: 'Arial, sans-serif' }}
-                        >
-                            {/* Header */}
-                            <div className="text-center mb-6">
-                                <h1 className="text-xl font-bold text-gray-900 mb-1">
-                                    {settings.college_name}
-                                </h1>
-                                <h2 className="text-lg font-semibold text-gray-800">
-                                    {timetable.class_name} - Semester {timetable.semester}
-                                    {timetable.section && ` (Section ${timetable.section})`}
-                                </h2>
-                                <p className="text-sm text-gray-600">Academic Year: {timetable.year}</p>
-                            </div>
+                <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
+                    <button
+                        onClick={handleDownloadPDF}
+                        style={{
+                            background: '#4f46e5',
+                            color: 'white',
+                            padding: '10px 20px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontWeight: '500'
+                        }}
+                    >
+                        <FileText size={18} />
+                        Download PDF
+                    </button>
+                </div>
+            </div>
 
-                            {/* Timetable Grid */}
-                            <table className="w-full border-collapse border-2 border-gray-800 text-sm">
-                                <thead>
-                                    <tr>
-                                        <th className="border-2 border-gray-800 p-2 bg-gray-100 font-bold">
-                                            Time / Day
+            <div style={{ background: '#f3f4f6', padding: '24px', borderRadius: '12px', overflow: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h2 style={{ fontSize: '18px', fontWeight: '600' }}>Preview</h2>
+                </div>
+
+                <div
+                    ref={printRef}
+                    style={{
+                        background: 'white',
+                        padding: '40px',
+                        width: orientation === 'landscape' ? '1123px' : '794px',
+                        minHeight: orientation === 'landscape' ? '794px' : '1123px',
+                        margin: '0 auto',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                    }}
+                >
+                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                        <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>{settings?.college_name || 'College Name'}</h1>
+                        <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{timetable?.title}</h2>
+                        <p style={{ color: '#6b7280' }}>Academic Year: {timetable?.year}</p>
+                    </div>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #000' }}>
+                        <thead>
+                            <tr>
+                                <th style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6' }}>
+                                    {isTransposed ? 'Day / Time' : 'Time / Day'}
+                                </th>
+                                {isTransposed ? (
+                                    timeSlots.map((time, i) => (
+                                        <th key={i} style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6', fontSize: '12px' }}>
+                                            {formatTime12(time.start)} - {formatTime12(time.end)}
                                         </th>
-                                        {workingDays.map((day: string) => (
-                                            <th
-                                                key={day}
-                                                className="border-2 border-gray-800 p-2 bg-gray-100 font-bold min-w-[100px]"
-                                            >
-                                                {day}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {timeSlots.map((timeSlot) => {
-                                        const [start, end] = timeSlot.split('-')
-
-                                        return (
-                                            <tr key={timeSlot}>
-                                                <td className="border-2 border-gray-800 p-2 font-medium text-center bg-gray-50">
-                                                    {start} - {end}
+                                    ))
+                                ) : (
+                                    workingDays.map(day => (
+                                        <th key={day} style={{ border: '1px solid #000', padding: '8px', background: '#f3f4f6' }}>{day}</th>
+                                    ))
+                                )}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {isTransposed ? (
+                                workingDays.map(day => (
+                                    <tr key={day}>
+                                        <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb' }}>{day}</td>
+                                        {timeSlots.map((time, i) => {
+                                            const slot = slots.find(s => s.day_of_week === day && s.start_time === time.start)
+                                            return (
+                                                <td key={i} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', height: '60px' }}>
+                                                    {renderSlotContent(slot)}
                                                 </td>
-                                                {workingDays.map((day: string) => {
-                                                    const slot = getSlotForDayAndTime(day, timeSlot)
-
-                                                    if (!slot) {
-                                                        return (
-                                                            <td key={day} className="border-2 border-gray-800 p-2 text-center text-gray-400">
-                                                                -
-                                                            </td>
-                                                        )
-                                                    }
-
-                                                    if (slot.slot_type === 'lunch') {
-                                                        return (
-                                                            <td
-                                                                key={day}
-                                                                className="border-2 border-gray-800 p-2 text-center bg-orange-50 font-medium"
-                                                            >
-                                                                LUNCH
-                                                            </td>
-                                                        )
-                                                    }
-
-                                                    if (slot.slot_type === 'break') {
-                                                        return (
-                                                            <td
-                                                                key={day}
-                                                                className="border-2 border-gray-800 p-2 text-center bg-blue-50 font-medium"
-                                                            >
-                                                                BREAK
-                                                            </td>
-                                                        )
-                                                    }
-
-                                                    return (
-                                                        <td
-                                                            key={day}
-                                                            className="border-2 border-gray-800 p-2 text-center"
-                                                            style={{ backgroundColor: `${slot.subject?.color}15` }}
-                                                        >
-                                                            <div className="font-semibold text-gray-900">
-                                                                {slot.subject?.name}
-                                                            </div>
-                                                            {slot.subject?.code && (
-                                                                <div className="text-xs text-gray-600">
-                                                                    ({slot.subject.code})
-                                                                </div>
-                                                            )}
-
-                                                            {slot.is_practical && slot.lab_batches && slot.lab_batches.length > 0 ? (
-                                                                <div className="text-xs text-gray-700 mt-1">
-                                                                    {slot.lab_batches.map((b, i) => (
-                                                                        <div key={i}>
-                                                                            {b.batch_name}: {b.lecturer?.short_name || '-'}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-xs text-gray-700 mt-1">
-                                                                    {slot.lecturer?.short_name}
-                                                                    {slot.classroom && ` · ${slot.classroom.name}`}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                    )
-                                                })}
-                                            </tr>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
-
-                            {/* Footer */}
-                            <div className="mt-4 text-xs text-gray-500 text-center">
-                                Generated by TimeTable Pro • {new Date().toLocaleDateString()}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Preview - Merged Sections */}
-            {exportMode === 'merged' && hasMultipleSections && (
-                <Card className="premium-card overflow-x-auto">
-                    <CardHeader>
-                        <CardTitle>Preview - All Sections Merged</CardTitle>
-                        <CardDescription>
-                            Sections: {relatedTimetables.map(t => t.section).join(', ')}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div
-                            ref={mergedTimetableRef}
-                            className="bg-white p-6 min-w-[900px]"
-                            style={{ fontFamily: 'Arial, sans-serif' }}
-                        >
-                            {/* Header */}
-                            <div className="text-center mb-6">
-                                <h1 className="text-xl font-bold text-gray-900 mb-1">
-                                    {settings.college_name}
-                                </h1>
-                                <h2 className="text-lg font-semibold text-gray-800">
-                                    {timetable.class_name} - Semester {timetable.semester} (All Sections)
-                                </h2>
-                                <p className="text-sm text-gray-600">Academic Year: {timetable.year}</p>
-                            </div>
-
-                            {/* Merged Timetable Grid */}
-                            <table className="w-full border-collapse border-2 border-gray-800 text-sm">
-                                <thead>
-                                    <tr>
-                                        <th className="border-2 border-gray-800 p-2 bg-gray-100 font-bold">
-                                            Time
-                                        </th>
-                                        <th className="border-2 border-gray-800 p-2 bg-gray-100 font-bold">
-                                            Sec
-                                        </th>
-                                        {workingDays.map((day: string) => (
-                                            <th
-                                                key={day}
-                                                className="border-2 border-gray-800 p-2 bg-gray-100 font-bold min-w-[90px]"
-                                            >
-                                                {day}
-                                            </th>
-                                        ))}
+                                            )
+                                        })}
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    {allTimeSlots.map((timeSlot) => {
-                                        const [start, end] = timeSlot.split('-')
-
-                                        return relatedTimetables.map((tt, ttIndex) => (
-                                            <tr key={`${timeSlot}-${tt.id}`}>
-                                                {ttIndex === 0 && (
-                                                    <td
-                                                        className="border-2 border-gray-800 p-2 font-medium text-center bg-gray-50"
-                                                        rowSpan={relatedTimetables.length}
-                                                    >
-                                                        {start}<br />-<br />{end}
-                                                    </td>
-                                                )}
-                                                <td className="border-2 border-gray-800 p-1 font-bold text-center bg-purple-50">
-                                                    {tt.section}
+                                ))
+                            ) : (
+                                timeSlots.map((time, i) => (
+                                    <tr key={i}>
+                                        <td style={{ border: '1px solid #000', padding: '12px', fontWeight: '600', background: '#f9fafb', whiteSpace: 'nowrap' }}>
+                                            {formatTime12(time.start)} - {formatTime12(time.end)}
+                                        </td>
+                                        {workingDays.map(day => {
+                                            const slot = slots.find(s => s.day_of_week === day && s.start_time === time.start)
+                                            return (
+                                                <td key={day} style={{ border: '1px solid #000', padding: '8px', textAlign: 'center', verticalAlign: 'middle', minWidth: '120px' }}>
+                                                    {renderSlotContent(slot)}
                                                 </td>
-                                                {workingDays.map((day: string) => {
-                                                    const slot = getSlotForDayAndTime(day, timeSlot, tt.slots)
+                                            )
+                                        })}
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
 
-                                                    if (!slot) {
-                                                        return (
-                                                            <td key={day} className="border-2 border-gray-800 p-1 text-center text-gray-400 text-xs">
-                                                                -
-                                                            </td>
-                                                        )
-                                                    }
+                    <div style={{ marginTop: '20px', fontSize: '12px', color: '#6b7280', textAlign: 'center' }}>
+                        Generated by TimeTable Pro • {new Date().toLocaleDateString()}
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
 
-                                                    if (slot.slot_type === 'lunch') {
-                                                        return (
-                                                            <td
-                                                                key={day}
-                                                                className="border-2 border-gray-800 p-1 text-center bg-orange-50 font-medium text-xs"
-                                                            >
-                                                                LUNCH
-                                                            </td>
-                                                        )
-                                                    }
+function renderSlotContent(slot: TimetableSlot | undefined) {
+    if (!slot) return ''
 
-                                                    if (slot.slot_type === 'break') {
-                                                        return (
-                                                            <td
-                                                                key={day}
-                                                                className="border-2 border-gray-800 p-1 text-center bg-blue-50 font-medium text-xs"
-                                                            >
-                                                                BREAK
-                                                            </td>
-                                                        )
-                                                    }
+    if (slot.slot_type === 'lunch') {
+        return (
+            <div style={{ fontWeight: 'bold', color: '#92400e', background: '#fef3c7', padding: '4px', borderRadius: '4px' }}>
+                LUNCH BREAK
+            </div>
+        )
+    }
 
-                                                    return (
-                                                        <td
-                                                            key={day}
-                                                            className="border-2 border-gray-800 p-1 text-center text-xs"
-                                                            style={{ backgroundColor: `${slot.subject?.color}15` }}
-                                                        >
-                                                            <div className="font-semibold text-gray-900">
-                                                                {slot.subject?.name}
-                                                            </div>
-                                                            {slot.is_practical && slot.lab_batches && slot.lab_batches.length > 0 ? (
-                                                                <div className="text-gray-600">
-                                                                    {slot.lab_batches.map(b => b.lecturer?.short_name).join(', ')}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-gray-600">
-                                                                    {slot.lecturer?.short_name}
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                    )
-                                                })}
-                                            </tr>
-                                        ))
-                                    })}
-                                </tbody>
-                            </table>
+    if (slot.slot_type === 'break') {
+        return (
+            <div style={{ fontWeight: 'bold', color: '#1e40af', background: '#dbeafe', padding: '4px', borderRadius: '4px' }}>
+                BREAK
+            </div>
+        )
+    }
 
-                            {/* Legend */}
-                            <div className="mt-4 flex gap-4 text-xs text-gray-600">
-                                <div className="flex items-center gap-1">
-                                    <div className="w-3 h-3 bg-purple-50 border border-gray-400"></div>
-                                    <span>Section</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <div className="w-3 h-3 bg-orange-50 border border-gray-400"></div>
-                                    <span>Lunch</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <div className="w-3 h-3 bg-blue-50 border border-gray-400"></div>
-                                    <span>Break</span>
-                                </div>
-                            </div>
+    if (slot.slot_type === 'free') {
+        return <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>- Free -</span>
+    }
 
-                            {/* Footer */}
-                            <div className="mt-4 text-xs text-gray-500 text-center">
-                                Generated by TimeTable Pro • {new Date().toLocaleDateString()}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
+    if (slot.is_practical) {
+        return (
+            <div style={{ fontSize: '12px' }}>
+                <div style={{ fontWeight: 'bold', marginBottom: '2px', color: '#059669' }}>PRACTICAL</div>
+                {slot.lab_batches?.map((batch, i) => (
+                    <div key={i} style={{ borderTop: i > 0 ? '1px dashed #e5e7eb' : 'none', paddingTop: '2px', marginTop: '2px' }}>
+                        <span style={{ fontWeight: '600' }}>{batch.batch_name}: </span>
+                        {batch.subject?.code} ({batch.classroom?.name || slot.classroom?.name})
+                    </div>
+                ))}
+            </div>
+        )
+    }
+
+    return (
+        <div>
+            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{slot.subject?.name}</div>
+            <div style={{ fontSize: '11px', color: '#4b5563' }}>
+                {slot.lecturer?.short_name} • {slot.classroom?.name}
+            </div>
         </div>
     )
 }

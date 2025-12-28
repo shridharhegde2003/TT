@@ -559,7 +559,7 @@ export default function TimetableEditorPage() {
 
     // Add lab batch
     const addLabBatch = () => {
-        setLabBatches([...labBatches, { batch_name: `${labBatches.length + 1}`, subject_id: '', lecturer_id: '', classroom_id: '' }])
+        setLabBatches([...labBatches, { batch_name: `B${labBatches.length + 1}`, subject_id: '', lecturer_id: '', classroom_id: '' }])
     }
 
     const updateLabBatch = (index: number, field: string, value: string) => {
