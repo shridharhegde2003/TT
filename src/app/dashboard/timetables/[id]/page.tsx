@@ -158,7 +158,7 @@ export default function TimetableEditorPage() {
 
             const [
                 { data: timetableData },
-                { data: slotsData },
+                { data: slotsData, error: slotsError },
                 { data: settingsData },
                 { data: lecturersData },
                 { data: classroomsData },
@@ -166,7 +166,7 @@ export default function TimetableEditorPage() {
             ] = await Promise.all([
                 supabase.from('timetables').select('*').eq('id', id).single(),
                 supabase.from('timetable_slots')
-                    .select('*, subject:subjects(*), lecturer:lecturers(*), classroom:classrooms(*)')
+                    .select('*')
                     .eq('timetable_id', id)
                     .order('slot_order', { ascending: true }),
                 supabase.from('college_settings').select('*').eq('user_id', user.id).single(),
@@ -175,32 +175,46 @@ export default function TimetableEditorPage() {
                 supabase.from('subjects').select('*').eq('user_id', user.id).order('name')
             ])
 
+            // Debug log
+            console.log('Timetable data:', timetableData)
+            console.log('Slots data from DB:', slotsData)
+            console.log('Slots error:', slotsError)
+            console.log('Working days:', settingsData?.working_days)
+
             if (!timetableData) {
                 toast({ title: 'Not Found', description: 'Timetable not found', variant: 'destructive' })
                 router.push('/dashboard/timetables')
                 return
             }
 
-            // Fetch lab batches for practical slots
-            const practicalSlots = (slotsData || []).filter(s => s.is_practical)
+            // Map slots with their related data manually
+            const slotsWithDetails = (slotsData || []).map(slot => ({
+                ...slot,
+                subject: subjectsData?.find((s: Subject) => s.id === slot.subject_id),
+                lecturer: lecturersData?.find((l: Lecturer) => l.id === slot.lecturer_id),
+                classroom: classroomsData?.find((c: Classroom) => c.id === slot.classroom_id)
+            }))
 
-            // Debug log
-            console.log('Slots data from DB:', slotsData)
-            console.log('Working days:', settingsData?.working_days)
+            // Fetch lab batches for practical slots
+            const practicalSlots = slotsWithDetails.filter(s => s.is_practical)
 
             if (practicalSlots.length > 0) {
                 const { data: batchesData } = await supabase
                     .from('lab_batches')
-                    .select('*, subject:subjects(*), lecturer:lecturers(*)')
+                    .select('*')
                     .in('timetable_slot_id', practicalSlots.map(s => s.id))
 
-                const slotsWithBatches = (slotsData || []).map(slot => ({
+                const finalSlots = slotsWithDetails.map(slot => ({
                     ...slot,
-                    lab_batches: (batchesData || []).filter(b => b.timetable_slot_id === slot.id)
+                    lab_batches: (batchesData || []).filter((b: any) => b.timetable_slot_id === slot.id).map((batch: any) => ({
+                        ...batch,
+                        subject: subjectsData?.find((s: Subject) => s.id === batch.subject_id),
+                        lecturer: lecturersData?.find((l: Lecturer) => l.id === batch.lecturer_id)
+                    }))
                 }))
-                setSlots(slotsWithBatches)
+                setSlots(finalSlots)
             } else {
-                setSlots(slotsData || [])
+                setSlots(slotsWithDetails)
             }
 
             setTimetable(timetableData)
@@ -425,7 +439,11 @@ export default function TimetableEditorPage() {
         )
     }
 
-    const workingDays = settings.working_days || []
+    // Sort working days in proper order
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const workingDays = (settings.working_days || []).sort((a: string, b: string) =>
+        dayOrder.indexOf(a) - dayOrder.indexOf(b)
+    )
 
     return (
         <div>
