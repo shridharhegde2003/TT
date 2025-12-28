@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS timetable_slots (
     day_of_week TEXT NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
-    slot_type TEXT NOT NULL CHECK (slot_type IN ('class', 'break', 'lunch')),
+    slot_type TEXT NOT NULL CHECK (slot_type IN ('class', 'break', 'lunch', 'free', 'cultural')),
     subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
     lecturer_id UUID REFERENCES lecturers(id) ON DELETE SET NULL,
     classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,

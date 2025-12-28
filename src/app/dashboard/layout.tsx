@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { Home, Users, Building, BookOpen, Calendar, Settings, LogOut, Menu, User } from 'lucide-react'
+import { Home, Users, Building, BookOpen, Calendar, Settings, LogOut, Menu, User, X } from 'lucide-react'
 
 const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: Home },
@@ -16,11 +16,27 @@ const navItems = [
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const [sidebarOpen, setSidebarOpen] = useState(true)
+    const [sidebarOpen, setSidebarOpen] = useState(false)
+    const [isMobile, setIsMobile] = useState(false)
     const [user, setUser] = useState<any>(null)
     const router = useRouter()
     const pathname = usePathname()
     const supabase = createClient()
+
+    // Check for mobile viewport
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768)
+            if (window.innerWidth >= 768) {
+                setSidebarOpen(true)
+            } else {
+                setSidebarOpen(false)
+            }
+        }
+        checkMobile()
+        window.addEventListener('resize', checkMobile)
+        return () => window.removeEventListener('resize', checkMobile)
+    }, [])
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -41,22 +57,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     return (
         <div style={{ display: 'flex', minHeight: '100vh', background: '#f3f4f6' }}>
+            {/* Mobile Overlay */}
+            {isMobile && sidebarOpen && (
+                <div
+                    onClick={() => setSidebarOpen(false)}
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.5)',
+                        zIndex: 40
+                    }}
+                />
+            )}
+
             {/* Sidebar */}
             <aside style={{
-                width: sidebarOpen ? '240px' : '0px',
+                width: '240px',
                 background: 'white',
                 borderRight: '1px solid #e5e7eb',
                 display: 'flex',
                 flexDirection: 'column',
-                transition: 'width 0.2s',
-                overflow: 'hidden'
+                transition: 'transform 0.3s ease',
+                position: isMobile ? 'fixed' : 'relative',
+                top: 0,
+                left: 0,
+                height: isMobile ? '100vh' : 'auto',
+                zIndex: 50,
+                transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)'
             }}>
                 {/* Logo */}
-                <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb' }}>
+                <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Link href="/dashboard" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <Calendar size={24} color="#4f46e5" />
                         <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>TimeTable Pro</span>
                     </Link>
+                    {isMobile && (
+                        <button onClick={() => setSidebarOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                            <X size={20} color="#6b7280" />
+                        </button>
+                    )}
                 </div>
 
                 {/* Nav Items */}
@@ -68,6 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             <Link
                                 key={item.href}
                                 href={item.href}
+                                onClick={() => isMobile && setSidebarOpen(false)}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',

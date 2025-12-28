@@ -600,6 +600,20 @@ function renderSlotContent(slot: TimetableSlot | undefined) {
         return null // Handled by grid
     }
 
+    if (slot.slot_type === 'cultural') {
+        return (
+            <div>
+                <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#7c3aed' }}>CULTURAL</div>
+                <div style={{ fontSize: '10px', color: '#4b5563' }}>
+                    {slot.subject?.code || slot.subject?.name || 'Activity'}
+                </div>
+                <div style={{ fontSize: '9px', color: '#9ca3af' }}>
+                    {slot.classroom?.name}
+                </div>
+            </div>
+        )
+    }
+
     if (slot.is_practical && slot.lab_batches && slot.lab_batches.length > 0) {
         // 2x2 Grid Layout for Practical with lecturers
         return (
